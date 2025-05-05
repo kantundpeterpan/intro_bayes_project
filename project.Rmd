@@ -1,0 +1,168 @@
+---
+title: Introduction to Bayesian inference
+subtitle: End of course data analysis project
+author: ---
+---
+
+# Vaccination against Varicella
+The Center for Disease Control (CDC) reports the vaccination coverage of
+Varicella among young children. Varicella, commonly known as chicken-
+pox, is a highly contagious viral infection caused by the varicella-zoster virus
+(VZV). Vaccination against chickenpox has been highly effective in reducing
+the incidence and severity of the disease. In the United States, vaccination
+against varicella has been part of the routine childhood immunization sched-
+ule since the mid-1990s. Since the vaccine’s introduction, there has been a
+dramatic decline in the number of chickenpox cases, hospitalizations, and
+deaths associated with the disease. The target for vaccination coverage of
+varicella (chickenpox) in the United States, as set by the Centers for Dis-
+ease Control and Prevention (CDC), is typically around 90% or higher for
+children. This high coverage rate is aimed at achieving herd immunity and
+preventing outbreaks of chickenpox within communities.
+
+
+# Project 1: Insurance
+The next table summarizes, based on a survey, the number of children in the
+birth cohort 2014-2017 that had at least one dose of the Varicella vaccine. It
+gives the number of vaccinated children (Vaccinated) amongst the number
+of children in the survey (Sample Size). The information is provided for 5
+regions of the US, and split according to insurance status (private insurance, uninsured or any Medicaid).
+
+| Geography | Insurance | Vaccinated | Sample Size |
+| :--- | :--- | :--- | :--- |
+| North Carolina | Any Medicaid | 380 | 419 |
+| North Carolina | Private Insurance Only | 632 | 673 |
+| North Carolina | Uninsured | 28 | 34 |
+| Georgia | Any Medicaid | 363 | 396 |
+| Georgia | Private Insurance Only | 527 | 576 |
+| Georgia | Uninsured | 36 | 50 |
+| Wisconsin | Any Medicaid | 282 | 332 |
+| Wisconsin | Private Insurance Only | 514 | 548 |
+| Wisconsin | Uninsured | 16 | 34 |
+| Florida | Any Medicaid | 446 | 490 |
+| Florida | Private Insurance Only | 588 | 628 |
+| Florida | Uninsured | 28 | 39 |
+| Mississippi | Private Insurance Only | 400 | 441 |
+| Mississippi | Uninsured | 27 | 32 |
+
+# Question 1
+
+::: {.callout}
+Derive analytically the posterior of the vaccination coverage per ge-
+ography and insurance group. Use a conjugate prior that (1) reflects
+no knowledge on the vaccination coverage, and (2) reflects that vac-
+cination coverage is typically around 90% or higher. Give posterior
+summary measures of the vaccination coverage per geography and in-
+surance group. Is the choice of the prior impacting your results?
+:::
+
+## Theoretical considerations
+
+The outcome *Vaccinated/Not Vaccinated* follows a Bernouilli distribution with parameter $p$:
+
+$V:$ Vaccination status
+$V \in \{0,1\}$
+$V \sim \mathcal{Bern}(p)$
+
+
+It is known from theory that the sum of $n$ $i.i.d$ Bernoulli random variables follows a Binomial distribution. This will be used to model the sample outcome: the number of vaccinated people $V_s$ in a random sample of size $n$:
+
+$$V_s = \sum_i^n V_i \sim \mathcal{Binom}(n, \theta)$$
+
+where $\theta$ is the parameter of interest - the vaccine coverage.
+
+In the course, we saw that the Beta distribution is the conjugate prior for binomially distributed data:
+
+| Distribution | Formula |
+| :----------- | :------- |
+| Prior | $p(\theta) = \mathcal{Beta}(\alpha, \beta)$ |
+| Likelihood | $p(y \mid \theta) = {n \choose k} \theta^k (1 - \theta)^{n-k}$ |
+| Posterior | $p(\theta \mid y) = \mathcal{Beta}(\alpha + k, \beta + n - k)$ |
+
+The summary measures for the Beta distribution are defined as follows:
+
+| Summary Measure | Formula |
+| :--------------- | :------- |
+| Mean  | $\frac{\alpha}{\alpha + \beta}$ |
+| Median |  See Note |
+| Mode  | $\frac{\alpha - 1}{\alpha + \beta - 2}$ for $\alpha, \beta > 1$ |
+
+Note: The median of the Beta distribution does not have a simple closed form expression. It can be approximated numerically or using statistical software.
+
+```{r}
+source("./project.R")
+```
+
+## Choice of prior distributions
+
+### (1) No prior knowledge
+In order to reflect no prior knowledge on the vaccine coverage, the weakly-informative prior Beta(1,1) will be used,  which is equivalent to the uniform distribution over $[0,1]$.
+
+### (2) Vaccine coverage >90%
+
+For modeling prior knowledge that vaccine coverage is about 90%, we chose the Beta(150, 7) distribution. 
+
+
+### Comparison of priors
+
+```{r}
+plot_priors
+```
+
+## Results
+
+```{r}
+post_summary %>% knitr::kable(
+    caption = "Posterior distribution parameters and summary measures per geography for the two different Beta priors",
+    col.names = c(
+        "Geography", "Insurance",
+        "alpha", "beta", "mean", "mode", "var", "HPD LL", "HPD UL",
+        "alpha", "beta", "mean", "mode", "var", "HPD LL", "HPD UL"
+    ),
+    digits = 2) -> testtbl
+testtbl %>%
+  add_header_above(header = c(
+    " "=2, "Beta(1,1) prior"=7, "Beta(150,7) prior"=7
+  )) %>%
+  add_header_above(header = c(
+    " "=2, "Posterior parameters and summary measures"=14
+  ))
+```
+
+```{r}
+grid.arrange(plots)
+```
+
+# Question 2
+
+::: {.callout}
+nvestigate whether the vaccination coverage is associated with the in-
+surance status using a logistic regression model
+Yij ∼Binom(πij ,Nij )
+with
+logit(πij ) = α0 + α1IAnyMedicaid,ij + α2IUninsured,ij
+where i is the location, j is the insurance status, πij is the vaccination
+coverage and I. are dummy variables. Assume non-informative priors
+for the parameters to be estimated. Write and explain the code in
+BUGS language
+:::
+
+https://github.com/andrewcparnell/jags_examples/blob/master/R%20Code/jags_logistic_regression.R
+
+
+
+```bugs
+model
+{
+  # Likelihood
+  for (t in 1:T) {
+    y[t] ~ dbin(p[t], K)
+    logit(p[t]) <- alpha_0 + alpha_1 * x_1[t] + alpha_2 * x_2[t]
+  }
+
+  # Priors
+  alpha_0 ~ dnorm(0.0,0.01)
+  alpha_1 ~ dnorm(0.0,0.01)
+  alpha_2 ~ dnorm(0.0,0.01)
+}
+```
+
