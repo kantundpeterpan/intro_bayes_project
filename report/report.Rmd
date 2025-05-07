@@ -2,9 +2,20 @@
 title: Introduction to Bayesian inference
 subtitle: End of course data analysis project
 author: ---
+execute: 
+  warning: false
+format:
+  pdf:
+    papersize: a4
+    geometry:
+      - margin=3cm
+      - top=0.75in
+      - bottom=0.75in
+    include-in-header: 
+      - text: \usepackage{lscape}
 ---
 
-# Vaccination against Varicella
+
 The Center for Disease Control (CDC) reports the vaccination coverage of
 Varicella among young children. Varicella, commonly known as chicken-
 pox, is a highly contagious viral infection caused by the varicella-zoster virus
@@ -89,7 +100,7 @@ The summary measures for the Beta distribution are defined as follows:
 Note: The median of the Beta distribution does not have a simple closed form expression. It can be approximated numerically or using statistical software.
 
 ```{r}
-source("./project.R")
+source("./code.R")
 ```
 
 ## Choice of prior distributions
@@ -110,7 +121,10 @@ plot_priors
 
 ## Results
 
-```{r}
+\begin{landscape}
+\small
+\centering
+```{r echo=F}
 post_summary %>% knitr::kable(
     caption = "Posterior distribution parameters and summary measures per geography for the two different Beta priors",
     col.names = c(
@@ -128,8 +142,10 @@ testtbl %>%
   ))
 ```
 
-```{r}
-grid.arrange(plots)
+\end{landscape}
+
+```{r fig.align='center'}
+grid.arrange(grobs = plots)
 ```
 
 # Question 2
@@ -149,20 +165,112 @@ BUGS language
 https://github.com/andrewcparnell/jags_examples/blob/master/R%20Code/jags_logistic_regression.R
 
 
-
-```bugs
+```{bugs class.source="numberLines"}
 model
 {
-  # Likelihood
   for (t in 1:T) {
-    y[t] ~ dbin(p[t], K)
-    logit(p[t]) <- alpha_0 + alpha_1 * x_1[t] + alpha_2 * x_2[t]
-  }
+    # Likelihood
+    y[t] ~ dbin(p[t], K[t])
+    # conditional mean model using link function
+    logit(p[t]) <- alpha_0 + ins_1 * x_1[t] + ins_2 * x_2[t]
+ }
 
   # Priors
   alpha_0 ~ dnorm(0.0,0.01)
-  alpha_1 ~ dnorm(0.0,0.01)
-  alpha_2 ~ dnorm(0.0,0.01)
+  ins_1 ~ dnorm(0.0,0.01)
+  ins_2 ~ dnorm(0.0,0.01)
+
+
+  # Vaccine coverage per Insurance group
+  pi_private <- exp(alpha_0)/(1+exp(alpha_0))
+  pi_medicaid <- exp(alpha_0 + ins_1)/(1+exp(alpha_0 + ins_1))
+  pi_uninsured <- exp(alpha_0 + ins_2)/(1+exp(alpha_0 + ins_2))
+
+  # Difference between vaccine coverage per insurance group
+  diff_priv_medicaid  <- pi_private - pi_medicaid
+  diff_priv_uninsured <- pi_private - pi_uninsured
 }
 ```
 
+**Likelihood function and model specification**
+
+For each row `t` in the dataset, the outcome `y[t]` (number of vaccinated children in the sample) is specified as drawn from a Binomial distribution with parameters `p[t]` and sample size `K[t]`. We also specify the conditional mean model for this likelihood function using the `logit` link function.
+
+**Prior distribution**
+
+As prior distribution for all parameters (intercept and indicator variables for the insurance group), a vague prior is chosen : $\mathcal{N}(\mu = 0, \tau = 0.01)$.
+
+**Quantities of interest**
+During each MCMC run, the vaccine coverage per insurance group is calculated using the inverse logit transformation, this will give access to the posterior distribution of vaccine coverage per insurance group.
+Furthermore, the differences between vaccine coverages are calculated which will be needed to answer Question 6.
+
+# Question 3
+
+::: {.callout}
+Run the MCMC method and check convergence of the MCMC chains.
+Give the details on how you checked convergence.
+:::
+
+## MCMC run summary
+
+```{r}
+model_run
+```
+
+## Convergence checks
+
+**Traceplots**
+```{r}
+plot(mcmc[,c("pi_private", "pi_medicaid", "pi_uninsured")], trace = T, density = F)
+```
+
+**Density plots per chain**
+
+```{r}
+ggplot(dens_plot_df, aes(x = value, color = factor(chain))) +
+  geom_density() +
+  labs(x = "Parameter Value", y = "Density",
+       title = "Posterior Density by Parameter and Chain",
+       color = "Chain") +
+  facet_wrap(~ parameter, scales = "free") + # Use facet_wrap on the 'parameter' column
+  theme_minimal()
+```
+
+**Autocorrelation plot**
+
+```{r}
+autocorr.plot(mcmc[,pi_params])
+```
+
+**$\hat R$**
+
+```{r}
+gelman.diag(mcmc[,pi_params])
+gelman.plot(mcmc[,pi_params])
+```
+
+**Geweke diagnostics**
+
+```{r}
+geweke.diag(mcmc[,pi_params])
+geweke.plot(mcmc[,pi_params])
+```
+
+# Question 4
+
+::: {.callout}
+Make a plot of the posterior of the model parameters and give posterior summary measures. Interpret the results.
+:::
+
+
+# Question 5
+
+::: {.callout}
+Give the posterior estimate of the vaccination coverage per region and insurance status. Compare with the analytical results you obtained in Question 1.
+:::
+
+# Question 6
+
+::: {.callout}
+Based on the logistic regression model, what is the probability (a posteriori) that coverage amongst children that have private insurance is higher than amongst children that have any medicaid? And compared to children with no insurance?
+:::

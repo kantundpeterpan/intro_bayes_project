@@ -1,6 +1,12 @@
+library(tidyr)
 library(dplyr)
 library(ggplot2)
 library(kableExtra)
+library(gridExtra)
+library(rjags)
+library(R2jags)
+
+source("../functions.R")
 
 # Load data
 vaccination_data <- data.frame(
@@ -51,6 +57,13 @@ plot_two_posteriors <- function(
          geom_line(aes(x = x, y = -dbeta(x, a2, b2)))
 
     return(p)
+}
+
+mcmc.as.data.frame <- function(mcmc){
+    df = as.data.frame(as.matrix(mcmc))
+    df$chain <- rep(1:nchain(mcmc), each = nrow(mcmc[[1]]))
+
+    return (df)
 }
 
 alpha_above90 = 150
@@ -108,6 +121,10 @@ vaccination_data$Insurance %>%
     as.factor() %>%
     relevel(ref = "Private Insurance Only") -> vaccination_data$Insurance
 
+vaccination_data$Geography %>% 
+    as.factor() %>%
+    relevel(ref = "Georgia") -> vaccination_data$Geography
+
 
 X <- model.matrix(
     ~ Insurance,
@@ -120,28 +137,46 @@ model
   # Likelihood
   for (t in 1:T) {
     y[t] ~ dbin(p[t], K[t])
-    logit(p[t]) <- alpha_0 + alpha_1 * x_1[t] + alpha_2 * x_2[t]
-  }
+    logit(p[t]) <- alpha_0 + ins_1 * x_1[t] + ins_2 * x_2[t]
+ }
 
   # Priors
   alpha_0 ~ dnorm(0.0,0.01)
-  alpha_1 ~ dnorm(0.0,0.01)
-  alpha_2 ~ dnorm(0.0,0.01)
+  ins_1 ~ dnorm(0.0,0.01)
+  ins_2 ~ dnorm(0.0,0.01)
+
+
+  # Parameters of interest
+  
+  ## Question 2
+  pi_private <- exp(alpha_0)/(1+exp(alpha_0))
+  pi_medicaid <- exp(alpha_0 + ins_1)/(1+exp(alpha_0 + ins_1))
+  pi_uninsured <- exp(alpha_0 + ins_2)/(1+exp(alpha_0 + ins_2))
+
+  ## Question 6
+  diff_priv_medicaid  <- pi_private - pi_medicaid
+  diff_priv_uninsured <- pi_private - pi_uninsured
 }
 "
 
-library(rjags)
-library(R2jags)
 # Set up the data
 model_data <- list(
     T = dim(vaccination_data)[1],
     y = vaccination_data$Vaccinated,
     x_1 = X[,2],
     x_2 = X[,3],
+    # x_3 = X[,4],
+    # x_4 = X[,5],
     K = vaccination_data$SampleSize)
 
 # Choose the parameters to watch
-model_parameters <- c("alpha_0", "alpha_1", "alpha_2")
+model_parameters <- c(
+    # "alpha_0",
+    # # "geom_1", "geom_2",
+    # "ins_1", "ins_2"
+    "pi_private", "pi_medicaid", "pi_uninsured",
+    "diff_priv_medicaid", "diff_priv_uninsured"
+    )
 
 # Run the model
 model_run <- jags(
@@ -149,7 +184,24 @@ model_run <- jags(
   parameters.to.save = model_parameters,
   model.file = textConnection(jags_str),
   n.chains = 4,
-  n.iter = 1000,
-  n.burnin = 200,
+  n.iter = 40000,
+  n.burnin = 2000,
   n.thin = 2
 )
+
+pi_params <- c(
+    "pi_private", "pi_medicaid",
+    "pi_uninsured"
+)
+
+mcmc <- as.mcmc(model_run)
+
+mcmcdf <- mcmc.as.data.frame(mcmc)
+
+dens_plot_df <- mcmcdf %>% 
+    select(pi_params, "chain") %>%
+    pivot_longer(
+        cols = all_of(pi_params),
+        names_to = "parameter",
+        values_to = "value"
+    )
