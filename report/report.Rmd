@@ -246,14 +246,21 @@ autocorr.plot(mcmc[,pi_params])
 
 ```{r}
 gelman.diag(mcmc[,pi_params])
-gelman.plot(mcmc[,pi_params])
+# gelman.plot(mcmc[,pi_params])
+par(mfcol=c(1,3))
+gelman.plot(mcmc[,pi_params[1]])
+gelman.plot(mcmc[,pi_params[2]])
+gelman.plot(mcmc[,pi_params[3]])
 ```
 
 **Geweke diagnostics**
 
 ```{r}
 geweke.diag(mcmc[,pi_params])
-geweke.plot(mcmc[,pi_params])
+par(mfcol=c(1,3))
+geweke.plot(mcmc[,pi_params[1]])
+geweke.plot(mcmc[,pi_params[2]])
+geweke.plot(mcmc[,pi_params[3]])
 ```
 
 # Question 4
