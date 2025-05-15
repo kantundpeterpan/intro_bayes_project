@@ -5,7 +5,7 @@ beta_binomial_posterior <- function(
         post_b = prior_b + n - k
         post_mean = post_a / (post_a + post_b)
         post_mode = (post_a - 1) / (post_a + post_b - 2)
-        post_variance = (post_a*post_b)/(post_a + post_b)**2*(post_a+post_b+1)
+        post_sd = sqrt((post_a*post_b)/((post_a + post_b)**2*(post_a+post_b+1)))
         # 95% equal tail interval
         hpd_ll = qbeta(0.025, post_a, post_b)
         hpd_ul = qbeta(0.975, post_a, post_b)
@@ -14,7 +14,7 @@ beta_binomial_posterior <- function(
             post_b = post_b,
             post_mean = post_mean,
             post_mode = post_mode,
-            post_variance = post_variance,
+            post_sd = post_sd,
             hpd_ll = hpd_ll,
             hpd_ul = hpd_ul
         )
