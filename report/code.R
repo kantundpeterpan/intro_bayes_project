@@ -50,8 +50,9 @@ df <- data.frame(
     beta = c(dbeta(x, 1, 1), dbeta(x, alpha_above90, beta_above90))
 )
 
-
 plot_priors <- ggplot(df, aes(x = x, y = beta, color = knowledge)) + geom_line()
+
+fig_q1_compprior_cap <- sprintf("Comparison of uniform Beta(1,1) prior vs. strong Beta(%s,%s) prior", alpha_above90, beta_above90)
 
 uni_posterior <- beta_binomial_posterior(
     1,1, vaccination_data$Vaccinated, vaccination_data$SampleSize
@@ -87,6 +88,13 @@ plots <- apply(posteriors, MARGIN=1, FUN=function(row){
     # sum(row)
 })
 
+plot_titles <- paste(vaccination_data$Geography, "-", vaccination_data$Insurance)
+
+for (i in 1:length(plots)){
+  plots[[i]] <- plots[[i]] + labs(title = plot_titles[i])
+}
+
+prior_comp_plot_cap <- sprintf("Posterior distributions per Geography/Insurance stratum, positive density: Beta(1,1) prior, negative density: Beta(%s,%s)", alpha_above90, beta_above90)
 
 ## Question 2 - Bayesian Logistic regression model
 #set private insurance as reference level
@@ -219,7 +227,7 @@ alpha_summary <- merge(
   )
 
 rownames(alpha_summary) <- alpha_summary$parameter
-# rownames(alpha_summary) <- c("$\alpha_0$", "$\alpha_1$", "$\\alpha_2$")
+rownames(alpha_summary) <- c("$\\alpha_0$", "$\\alpha_1$", "$\\alpha_2$")
 alpha_summary$parameter <- NULL
 colnames(alpha_summary) <- c('Mean', 'Median', 'SD', 'LL', 'UL')
 
@@ -273,7 +281,7 @@ q5 <- q5 %>%
   add_row(Geography="MS", Insurance="Medicaid",
    diff_logreg_beta11 = NULL, diff_logreg_betaconf = NULL,
    Mean=final_summary['pi_medicaid', 'Mean']) %>%
-   arrange(Geography)
+   arrange(Geography, Insurance)
 
 q5_compbeta11_plot <- q5 %>% 
   select(Geography, Insurance, diff_logreg_beta11) %>% 
@@ -290,13 +298,14 @@ q5_compbetaconf_plot <- q5 %>%
   theme_minimal() + theme(legend.position = "top")
 
 cols <- c(
-  "Geo.", "Ins.", "$k$", "$n$", 
+  "Geo.", "Ins.", "$k$", "$n$",
   "$\\bar\\pi_{logreg}$",
   "$\\bar\\pi_{Beta(1,1)}$",
   sprintf("$\\bar\\pi_{Beta(%s,%s)}$", alpha_above90, beta_above90),
   "$\\Delta_{Beta(1,1)}$",
   sprintf("$\\Delta_{Beta(%s,%s)}$", alpha_above90, beta_above90)
 )
+
 ## Get greek letter labels for 
 ## facet labels
 ## https://ggplot2.tidyverse.org/reference/labellers.html
@@ -319,7 +328,7 @@ q5_compplot <-  q5_long %>%
   theme_minimal() + theme(legend.position = "top")
 
 fig_q5_comp_cap = paste("Differences between posterior means of vaccine coverage per region and insurance status obtained from logistic regression and conjugate pair modeling.
-Differences are most pronounced for the Uninsured group in MS, NC, WC  when using a $Beta(1,1) prior$ and all states when using a ", sprintf("$Beta(%s, %s)$", alpha_above90, beta_above90), "prior.")
+Differences are most pronounced for the Uninsured group in MS, NC, WC  when using a $Beta(1,1)$ prior and all states when using a ", sprintf("$Beta(%s, %s)$", alpha_above90, beta_above90), "prior.")
 
 # Question 6
 ## Density plots and eCDF of differences
@@ -468,13 +477,14 @@ q7$diff_logreg_betaconf <- q7$Mean - q7$post_mean.1
 
 # compute posterior for coverage MS/Medicaid using additive model
 ms_medi_contrast <- c(1,0,1,0,0,1,0)
+# posterior distribution for pi_ms_medicaid
 post_coverage_ms_medi <- (ms_medi_contrast %*% t(q7_mcmcdf[,1:7])) %>% {exp(.) / (1 + exp(.)) }
 
 q7 <- q7 %>%
   add_row(Geography="MS", Insurance="Medicaid",
    diff_logreg_beta11 = NULL, diff_logreg_betaconf = NULL,
    Mean=mean(post_coverage_ms_medi)) %>%
-   arrange(Geography)
+   arrange(Geography, Insurance)
 
 colnames(q7) <- cols
 tex_labels <- list()
@@ -494,11 +504,18 @@ q7_compplot <-  q7_long %>%
   facet_wrap(~name, labeller = label_parsed) + 
   theme_minimal() + theme(legend.position = "top")
 
-# Q8
-#replace coverage[x] by Geo_insurance
-colnames(q7_mcmcdf_coverage) <- c(vaccination_data[map_mcmc_vacc_data,] %>% mutate(key = paste(Geography, "_", Insurance, sep = '')) %>% select(key) %>% as.vector() %>% unlist(), 'chain')
+# Question 8
+# we use the dataframe of posterior coverage samples
+# from Q7
+# replace labels: "coverage[x]" by "{Geo}_{insurance}"
+colnames(q7_mcmcdf_coverage) <- c(
+  vaccination_data[map_mcmc_vacc_data,] %>%
+  mutate(key = paste(Geography, "_", Insurance, sep = '')) %>% 
+  select(key) %>% as.vector() %>% unlist(),
+  'chain'
+)
 
-# reference df
+# North Carolina reference df
 nc <- q7_mcmcdf_coverage[,grepl("NC", colnames(q7_mcmcdf_coverage))]
 colnames(nc) <- c("Medicaid", "Private", "Uninsured")
 
@@ -517,9 +534,8 @@ for (col in colnames(q7_mcmcdf_coverage[,!grepl("NC", colnames(q7_mcmcdf_coverag
     }
   }
 }
-ratio_df <- as.data.frame(ratio_list)
 
-q8_hpddf <- ratio_df %>% as.mcmc() %>% HPDinterval()
+ratio_df <- as.data.frame(ratio_list)
 
 ratio_df_long <- ratio_df %>% 
   pivot_longer(
@@ -528,8 +544,75 @@ ratio_df_long <- ratio_df %>%
     values_to = 'value'
   )
 
+q8_summary <- ratio_df_long %>% 
+  group_by(parameter) %>%
+    summarize(
+      Mean=mean(value),
+      Median=median(value),
+      SD=sd(value)
+    )
+
+q8_hpddf <- ratio_df %>% as.mcmc() %>% HPDinterval() %>% as.data.frame()
+q8_hpddf$parameter <- rownames(q8_hpddf)
+rownames(q8_hpddf) <- NULL
+
+q8_summary <- merge(q8_summary, q8_hpddf, by = 'parameter')
+
+idx <- str_split(q8_summary$parameter, "_") %>% as.data.frame() %>% t()
+rownames(idx) <- NULL
+colnames(idx) <- c('Geo.', 'Ins.')
+
+q8_summary <- cbind(idx, q8_summary) %>% select(-parameter)
+
+colnames(q8_summary) <- c('Geo.', 'Ins.', 'Mean', 'Mode', 'SD', 'LL', 'UL')
+
 ridge_plot <- ratio_df_long %>%
   ggplot(aes(x = value, y = parameter, fill = parameter)) + 
   geom_density_ridges() +
   theme_ridges() + 
   theme(legend.position = "none")
+
+ridge_plot_cap = "Ridgeline plot showing the posterior distribution of the ratio of the vaccine coverage in a given Geography/Insurance group stratum compared to the corresponding Insurance group in North Carolina"
+
+# Question 9
+## Caterpillar plot
+
+# Question 10
+# Posterior predictive dist for MS/Medicaid
+# K[t] = 519
+
+# generate length(post_coverage_ms_medi) samples with n=519 and posterior
+# probabilites obtained from the additive log regression model
+q10_ppd <- rbinom(length(post_coverage_ms_medi), 519, post_coverage_ms_medi)
+q10_ppddf <- data.frame(
+  parameter='y_postpred',
+  value = q10_ppd
+)
+
+q10_ppd_summary <- q10_ppddf %>%
+  group_by(parameter) %>%
+  summarize(
+    Mean=mean(value),
+    Median=median(value),
+    SD=sd(value)
+  )
+# q10_ppd_summary$parameter <- rownames(q10_ppd_summary)
+
+ppd_hpd <- HPDinterval(as.mcmc(q10_ppd)) %>% as.data.frame()
+colnames(ppd_hpd) <- c('LL', 'UL')
+ppd_hpd$parameter <- 'y_postpred'
+
+# posterior predictive summary measures
+q10_final <- merge(q10_ppd_summary, ppd_hpd, by='parameter') %>%
+  select(-parameter) %>%
+  round(3)
+
+q10_tbl_cap = "Summary measures and HPD interval for the posterior predictive distribution
+for vaccinated people in a sample of size 519 in the MS/Mississippi stratum."
+
+# posterior predictive plot
+q10_plot <- q10_ppddf %>% 
+  ggplot(aes(x = value)) +
+  geom_histogram(aes(y = ..density..)) + 
+  geom_density() +
+  theme_classic()

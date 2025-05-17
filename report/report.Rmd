@@ -6,13 +6,31 @@ execute:
   warning: false
 format:
   pdf:
+    keep-tex: true
     papersize: a4
     geometry:
-      - margin=3cm
+      - margin=2.5cm
       - top=0.75in
       - bottom=0.75in
     include-in-header: 
-      - text: \usepackage{pdflscape}
+      - text: |
+          \usepackage{pdflscape}
+          \usepackage{changepage}
+          \usepackage{float}
+          \floatplacement{table}{H}
+  latex:
+    keep-md: true
+    papersize: a4
+    geometry:
+      - margin=2cm
+      - top=0.75in
+      - bottom=0.75in
+    include-in-header: 
+      - text: |
+          \usepackage{pdflscape}
+          \usepackage{changepage}
+          \usepackage{float}
+          \floatplacement{table}{H}
 ---
 
 
@@ -89,6 +107,8 @@ In the course, we saw that the Beta distribution is the conjugate prior for bino
 | Likelihood | $p(y \mid \theta) = {n \choose k} \theta^k (1 - \theta)^{n-k}$ |
 | Posterior | $p(\theta \mid y) = \mathcal{Beta}(\alpha + k, \beta + n - k)$ |
 
+: Beta-Binomial conjugate model {#tbl-bb-conj}
+
 The summary measures for the Beta distribution are defined as follows:
 
 | Summary Measure | Formula |
@@ -97,9 +117,11 @@ The summary measures for the Beta distribution are defined as follows:
 | Median |  See Note |
 | Mode  | $\frac{\alpha - 1}{\alpha + \beta - 2}$ for $\alpha, \beta > 1$ |
 
+: Beta distribution summary measures {#tbl-beta-sum}
+
 Note: The median of the Beta distribution does not have a simple closed form expression. It can be approximated numerically or using statistical software.
 
-```{r echo=F}
+```{r echo=F, output=F}
 knitr::opts_chunk$set(echo = FALSE)
 source("./code.R")
 ```
@@ -116,36 +138,36 @@ For modeling prior knowledge that vaccine coverage is about 90%, we chose the Be
 
 ### Comparison of priors
 
-```{r}
-plot_priors
+```{r , fig.cap=fig_q1_compprior_cap}
+plot_priors + ylab('density')
 ```
 
 ## Results
 
-\begin{landscape}
+<!-- \begin{landscape}
 \small
-\centering
+\centering -->
 ```{r echo=F, output='asis'}
-post_summary %>% knitr::kable(
+post_summary %>% kbl(
     caption = "Posterior distribution parameters and summary measures per geography for the two different Beta priors",
     col.names = c(
         "Geography", "Insurance",
-        "alpha", "beta", "mean", "mode", "var", "HPD LL", "HPD UL",
-        "alpha", "beta", "mean", "mode", "var", "HPD LL", "HPD UL"
+        "$\\alpha$", "$\\beta$", "mean", "mode", "var", "HPD LL", "HPD UL",
+        "$\\alpha$", "$\\beta$", "mean", "mode", "var", "HPD LL", "HPD UL"
     ),
-    digits = 3, linesep = '', format = 'latex')  %>%
+    digits = 3, linesep = '', escape=F, booktabs = T)  %>%
   add_header_above(header = c(
     " "=2, "Beta(1,1) prior"=7, "Beta(150,7) prior"=7
   )) %>%
   add_header_above(header = c(
     " "=2, "Posterior parameters and summary measures"=14
-  ))
+  )) %>% landscape()
 ```
 
-\end{landscape}
+<!-- \end{landscape} -->
 
-```{r fig.height=16, fig.width=10}
-grid.arrange(grobs = plots)
+```{r fig-prior-comp, fig.height=8, fig.width=7, fig.cap=prior_comp_plot_cap}
+grid.arrange(grobs = plots, ncol = 3)
 ```
 
 
@@ -221,16 +243,18 @@ model_run
 ## Convergence checks
 
 **Traceplots**
-```{r}
+```{r fig-q3-trace, fig.height=2}
 # par(mfrow=c(1,3))
 # plot(mcmc[,c("pi_private", "pi_medicaid", "pi_uninsured")], trace = T, density = F)
-mcmc_trace(mcmc[,alpha_params])
+mcmc_trace(mcmc[,alpha_params]) + 
+  legend_move('top') + 
+  theme(axis.text.x = element_text(angle = 45))
 ```
 
 
 **Density plots per chain**
 
-```{r}
+```{r fig-q3-denschain, fig.height=2}
 ggplot(alpha_plot_df, aes(x = value, color = factor(chain))) +
   geom_density() +
   labs(x = "Parameter Value", y = "Density",
@@ -243,7 +267,7 @@ ggplot(alpha_plot_df, aes(x = value, color = factor(chain))) +
 **Autocorrelation plot**
 
 
-```{r}
+```{r fig-q3-autocorr, fig.height=4}
 mcmc_acf(mcmc[,alpha_params])
 ```
 
@@ -288,7 +312,7 @@ ggplot(alpha_plot_df, aes(x = value)) +
 ```
 
 ```{r tbl-alpha-post}
-knitr::kable(alpha_summary) %>%
+kbl(alpha_summary, escape = F, booktabs = T) %>%
   add_header_above(
     header = c("Parameter"=1, "Summary measures"=3, "95% HPD interval"=2)
   )
@@ -316,25 +340,33 @@ The vaccine coverage in a given group can be obtained from the $log(odds)$ (see 
 
 $$\pi = {\exp(log(odds)) \over 1+\exp(log(odds))}$$
 
-Posterior estimates for the mean vaccine coverage per region and insurance status are given in @tbl-q5-post and @fig-q5-comp.
+Posterior estimates for the mean vaccine coverage per region and insurance status are given in \ref{tbl-q5-post}. To facilite comparison against the results of conjugate modeling in Question 1, @fig-q5-comp shows the difference of the posterior mean obtained from the logistic regression model ($\bar\pi_{logreg}$) with respect to a $Beta(1,1)$ prior ($\Delta_{Beta(1,1)}$), and to a $Beta(`r alpha_above90`,`r beta_above90`)$ ($\Delta_{Beta(`r alpha_above90`,`r beta_above90`)}$), respectively. 
 
-```{r tbl-q5-post, output='asis'}
+For both priors, the differ between in the posterior mean between the logistic regression model and the conjugate modeling is most pronounced for the group of Uninsured children.
+Compared to the strong prior, $\Delta_{Beta(`r alpha_above90`,`r beta_above90`)}$ is negative in the Uninsured group across all states, while for the non-informative prior, $\Delta_{Beta(1,1)}$ is negative for uninsured children in MS and NC, strongly positive in WI, and neglegible in FL and GA.
+
+```{r} 
+#| label: tbl-q5-post
 # cols <- colnames(q5)
 # cols[8] = "$\\Delta_{Beta(150,7)}$"
 
 knitr::kable(
     q5,
     digits = 3,
-    # format = 'latex',
-    booktabs = T,
-    caption = 'Posterior estimates of mean vaccine coverages from the logistic regression model vs. estimates from conjugate pair modeling. Subscripts indicate whether the esimates was obtained from logistic regression or the chosen prior distribution, respectively. $\\Delta_{Beta(\\alpha, \\beta)}$ gives the difference between posterior estimates from the logistic regression model and conjugate pair modeling. Vaccine coverage for MS/Medicaid can only be obtained from the logistic regression model.'
-  )
+    booktabs = T, 
+    escape=F,
+    linesep = c('', '', '\\addlinespace'),
+    label='tbl-q5-post',
+    caption = 'Posterior estimates of mean vaccine coverages from the logistic regression model vs. estimates from conjugate pair modeling. Subscripts indicate whether the estimates was obtained from logistic regression or the chosen prior distribution, respectively. $\\Delta_{Beta(\\alpha, \\beta)}$ gives the difference between posterior estimates from the logistic regression model and conjugate pair modeling. Vaccine coverage for MS/Medicaid can only be obtained from the logistic regression model.',
+    format='latex'
+  ) %>% column_spec(2, width="2.5cm")
 ```
 
 ```{r fig-q5-comp, fig.cap=fig_q5_comp_cap}
 # grid.arrange(grobs = list(q5_compbeta11_plot, q5_compbetaconf_plot), ncol = 2)
 q5_compplot + ylab(TeX("$\\bar\\pi_{logreg} - \\bar\\pi_{\\Beta(\\alpha, \\beta)}$"))
 ```
+
 
 # Question 6
 
@@ -377,17 +409,19 @@ cat(q7_jags_str)
 
 Convergence was checked in a similar way as for the model defined in Question 3. In brief, trace plots showed the expected caterpillar pattern,  posterior densities per parameter and chain showed superposed well and autocorrelation plots revealed decreasing autocorrelation with increasing lag number - all indicating convergence.
 
-```{r tbl-q7-post, output='asis'}
+```{r tbl-q7-post}
 # cols <- colnames(q5)
 # cols[8] = "$\\Delta_{Beta(150,7)}$"
 
-knitr::kable(
+kbl(
     q7,
     digits = 3,
     # format = 'latex',
     booktabs = T,
+    escape = F,
+    linesep = c('', '', '\\addlinespace'),
     caption = 'Posterior estimates of mean vaccine coverages from the logistic regression model including a region specific intercept vs. estimates from conjugate pair modeling. Subscripts indicate whether the esimates was obtained from logistic regression or the chosen prior distribution, respectively. $\\Delta_{Beta(\\alpha, \\beta)}$ gives the difference between posterior estimates from the logistic regression model and conjugate pair modeling. Vaccine coverage for MS/Medicaid can only be obtained from the logistic regression model.'
-  )
+  ) %>% column_spec(2, width = "2.5cm")
 ```
 
 ```{r fig-q7-comp}
@@ -409,10 +443,15 @@ Interpret the results.
 :::
 
 ```{r}
-knitr::kable(q8_hpddf)
+q8_summary %>% kbl(
+    digits = 3,
+    caption = 'Posterior summary measures of the ratio of the vaccine coverage in a given Geography/Insurance group stratum compared to the corresponding Insurance group in North Carolina',
+  ) %>% add_header_above(
+    header = c(" "=2, "Summary measures"=3, "95% HPD interval"=2)
+  )
 ```
 
-```{r}
+```{r fig-q8-ridge, fig.cap=ridge_plot_cap}
 ridge_plot
 ```
 
@@ -422,6 +461,38 @@ ridge_plot
 Make a caterpillar plot of the estimated coverage (per location and insurance status). Include also the observed vaccination proportion in the plot.
 :::
 
+```{r}
+
+# Create combined labels and order by mean values
+posterior_df <- q7_post_summary %>%
+  mutate(Label = paste(Geography, "-", Insurance)) %>%
+  arrange(desc(Mean)) # Sort by mean in descending order
+
+# Add row number for visualization
+posterior_df$row_id <- 1:nrow(posterior_df)
+
+# Create the caterpillar plot
+ggplot(posterior_df, aes(x = Mean, y = reorder(Label, Mean), color = Insurance)) +
+  geom_point(size = 3) +
+  geom_errorbarh(aes(xmin = LL, xmax = UL), height = 0.2) +
+  labs(
+    title = "Caterpillar Plot of Posterior Means \n with Credible Intervals",
+    subtitle = "Ordered by posterior mean values",
+    x = "Posterior Mean",
+    y = ""
+  ) +
+  theme_minimal() +
+  theme(
+    panel.grid.minor = element_blank(),
+    panel.grid.major.y = element_blank(),
+    axis.text.y = element_text(hjust = 0)
+  ) +
+  scale_color_brewer(palette = "Set1") +
+  geom_vline(xintercept = mean(posterior_df$Mean), linetype = "dashed", 
+             color = "gray50", alpha = 0.7)
+```
+
+
 # Question 10
 
 ::: {.callout}
@@ -429,3 +500,46 @@ No data is given for children insured by Any medicaid in Mississippi.
 Predict the number of vaccinated individuals in Mississippi among 519
 children with any medicaid
 :::
+
+The posterior predictive distribution of the sample outcome in for MS/Medicaid with a sample size of $n=519$ can be obtained using the posterior distribution of the logodds obtained from the additive logistic regression model built in Question 10.
+
+**Posterior sample of the vaccine coverage**
+
+$m$ : Contrast row vector for the Mississippi and Medicaid insurance group
+
+$\theta^{(s)}$ : Row vector of posterior samples of model parameters (rows: MCMC iteration, columns: sampled parameter values) $s=1,2,...,S$
+
+$\operatorname{logit^{-1}}(x) = {{e^x} \over {1+e^x}}$
+
+1. Calculation of logodds $\eta^{(s)}$
+
+$$\eta^{(s)} = m\theta^{(s)\top}$$
+
+2. Inverse logit transformation
+
+$$ \pi^{(s)} = \operatorname{logit^{-1}}\left(\eta^{(s)}\right)$$
+
+3. Binomial sampling
+
+$$y^{(s)}=\mathcal{Bin}\left(n=519, \pi^{(s)}\right)$$
+
+The posterior predictive distribution of $y$ is approximated by $\left\{y^{(s)}\right\}^S_{s=1}$.
+
+```{r tbl-10}
+knitr::kable(
+  q10_final,
+  caption = q10_tbl_cap
+)  %>% add_header_above(
+    header = c("Summary measures"=3, "95% HPD interval"=2)
+  )
+```
+
+```{r}
+q10_ppddf %>% 
+  ggplot(aes(x = value)) +
+  geom_histogram(bins = 22, aes(y = ..density..),
+    color = 'black', fill = 'white') + 
+  geom_density() +
+  theme_minimal() +
+  xlab(TeX("$\\Y^{(s)}$"))
+```
