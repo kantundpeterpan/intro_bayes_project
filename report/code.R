@@ -1,3 +1,18 @@
+# List of required packages
+required_packages <- c(
+  "tidyr", "dplyr", "ggplot2", "kableExtra", "gridExtra",
+  "rjags", "R2jags", "bayesplot", "glue", "latex2exp",
+  "stringr", "ggridges"
+)
+
+# Check and install missing packages
+for (pkg in required_packages) {
+  if (!requireNamespace(pkg, quietly = TRUE)) {
+    install.packages(pkg)
+  }
+}
+
+# Load the libraries
 library(tidyr)
 library(dplyr)
 library(ggplot2)

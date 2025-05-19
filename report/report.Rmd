@@ -1,9 +1,10 @@
 ---
 title: Introduction to Bayesian inference
 subtitle: End of course data analysis project
-author: ---
+author: Rafke ..., Joelle ..., Samer ..., Ermioni ..., Heiner ...
 execute: 
   warning: false
+# rendering with Quarto
 format:
   pdf:
     keep-tex: true
@@ -31,6 +32,23 @@ format:
           \usepackage{changepage}
           \usepackage{float}
           \floatplacement{table}{H}
+# RStudio rendering
+output:
+  pdf_document:
+    keep_tex: true
+    # latex_engine: xelatex
+    geometry:
+      - margin=2.5cm
+      - top=0.75in
+      - bottom=0.75in
+    include_before:
+      - \usepackage{pdflscape}
+      - \usepackage{changepage}
+      - \usepackage{float}
+    includes:
+      in_header:
+        - text: |
+            \floatplacement{table}{H}
 ---
 
 
