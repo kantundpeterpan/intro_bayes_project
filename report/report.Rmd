@@ -209,27 +209,29 @@ https://github.com/andrewcparnell/jags_examples/blob/master/R%20Code/jags_logist
 ```{bugs class.source="numberLines", echo=T}
 model
 {
+  # Likelihood
   for (t in 1:T) {
-    # Likelihood
     y[t] ~ dbin(p[t], K[t])
-    # conditional mean model using link function
-    logit(p[t]) <- alpha_0 + ins_1 * x_1[t] + ins_2 * x_2[t]
+    logit(p[t]) <- alpha_0 + alpha_1 * x_1[t] + alpha_2 * x_2[t]
  }
 
   # Priors
   alpha_0 ~ dnorm(0.0,0.01)
-  ins_1 ~ dnorm(0.0,0.01)
-  ins_2 ~ dnorm(0.0,0.01)
+  alpha_1 ~ dnorm(0.0,0.01)
+  alpha_2 ~ dnorm(0.0,0.01)
 
 
-  # Vaccine coverage per Insurance group
+  # Parameters of interest
+  
+  ## Question 5 - vaccine coverage
   pi_private <- exp(alpha_0)/(1+exp(alpha_0))
-  pi_medicaid <- exp(alpha_0 + ins_1)/(1+exp(alpha_0 + ins_1))
-  pi_uninsured <- exp(alpha_0 + ins_2)/(1+exp(alpha_0 + ins_2))
+  pi_medicaid <- exp(alpha_0 + alpha_1)/(1+exp(alpha_0 + alpha_1))
+  pi_uninsured <- exp(alpha_0 + alpha_2)/(1+exp(alpha_0 + alpha_2))
 
-  # Difference between vaccine coverage per insurance group
+  ## Question 6 - Differences in vaccine coverages
   diff_priv_medicaid  <- pi_private - pi_medicaid
   diff_priv_uninsured <- pi_private - pi_uninsured
+
 }
 ```
 
@@ -561,3 +563,5 @@ q10_ppddf %>%
   theme_minimal() +
   xlab(TeX("$\\Y^{(s)}$"))
 ```
+
+The posterior predictive mean for a new sample from the MS/Medicaid population with $n=519$ is $\hat Y^{S+1} = `r q10_final[,'Mean']`$. With a posterior probability of 95% $\tilde{y}$ lies in  $\left[`r q10_final[,'LL']`, `r q10_final[,'UL']`\right]$.
