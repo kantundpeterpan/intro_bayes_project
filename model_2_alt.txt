@@ -1,0 +1,20 @@
+model {
+  for (i in 1:N) {
+    y[i] ~ dbin(pi[i], n[i])
+    logit(pi[i]) <- alpha0[region_i[i]] + alpha[1] * is_medicaid[i] + alpha[2] * is_private[i]
+  }
+
+  # Region-specific intercepts
+  for (j in 1:R) {
+    alpha0[j] ~ dnorm(mu, sigma)
+  }
+
+  # Hyperparameters
+  mu ~ dnorm(0, 0.001)
+  sigma ~ dnorm(0, 0.001)
+
+  # Insurance coefficients (Medicaid and Uninsured)
+  for (k in 1:2) {
+    alpha[k] ~ dnorm(0, 0.001)
+  }
+}

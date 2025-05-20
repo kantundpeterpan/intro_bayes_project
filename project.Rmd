@@ -1,0 +1,469 @@
+---
+title: "Project"
+author: "Joëlle Marotta, student number 2262252"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Data
+
+```{r}
+vaccination_data <- data.frame(
+    Insurance = factor(c("Medicaid", "Private", "Uninsured", "Medicaid", "Private", "Uninsured", "Medicaid", "Private", "Uninsured",
+                         "Medicaid", "Private", "Uninsured", "Private", "Uninsured"), 
+                       levels = c("Uninsured", "Medicaid", "Private")),
+    Region = factor(c("NC", "NC", "NC", "GA", "GA", "GA", "WI", "WI", "WI", "FL", "FL", "FL", "MS", "MS"), 
+                    levels = c("NC", "GA", "WI", "FL", "MS")),
+    Vaccinated = c(380, 632, 28, 363, 527, 36, 282, 514, 16, 446, 588, 28, 400, 27),
+    SampleSize = c(419, 673, 34, 396, 576, 50, 332, 548, 34, 490, 628, 39, 441, 32)
+)
+```
+
+## Task 1
+As a conjugate prior for the binomial distribution, the beta distribution was chosen.
+
+```{r}
+library(HDInterval)
+posterior_summary <- function(data, alpha, beta){
+  # Step 1: empty list which will be filled with rows 
+  results <- list()
+  
+  # Step 2: for each row, calculate posterior summary statistics
+  for (i in 1:nrow(data)) {
+    y_ij <- data$Vaccinated[i]
+    n_ij <- data$SampleSize[i]
+  
+    a_post <- alpha + y_ij
+    b_post <- beta + n_ij - y_ij
+  
+    mean_post <- a_post / (a_post + b_post)
+    hpd <- hdi(qbeta, shape1 = 1 + y_ij, shape2 = 1 + n_ij + y_ij)
+    hpd_lower <- hpd[1]
+    hpd_upper <- hpd[2]
+    median_post <- qbeta(0.5, a_post, b_post) # not needed
+    mode_post <- (a_post - 1) / (a_post + b_post - 2) # check it, not needed
+    variance_post <- (a_post * b_post) / ((a_post + b_post)^2 * (a_post + b_post + 1))
+    lower_ci <- qbeta(0.025, a_post, b_post)
+    upper_ci <- qbeta(0.975, a_post, b_post)
+  
+  # Step 3: add the calculated statistics to the row
+    updated_row <- data.frame(
+      Region = data$Region[i],
+      Insurance = data$Insurance[i],
+      Vaccinated = y_ij,
+      SampleSize = n_ij,
+      Mean = mean_post,
+      Median = median_post,
+      Mode = mode_post,
+      Variance = variance_post,
+      LowerCI = lower_ci, # Bayesian CI but do we need HPD as well?
+      UpperCI = upper_ci,
+      LowerHPD = hpd_lower,
+      UpperHPD = hpd_upper,
+      stringsAsFactors = TRUE
+    )
+    
+  # Step 4: add row to list
+    results[[i]] <- updated_row
+  }
+  # Step 5: add list to table
+  results <- do.call(rbind, results)  
+  rownames(results) <- NULL           # reset rownames, otherwise they are named 'lower1, ...'
+  return(results)
+}
+```
+
+```{r}
+# no knowledge = uniform prior Beta(1,1)
+print(results_uniform <- posterior_summary(vaccination_data, alpha = 1, beta = 1))
+# prior knowledge for vaccination coverage ~ 90 %, two cases: Beta(9,1) and Beta(90,10) with E[pi_ij] = alpha/(alpha+beta)
+print(results_beta9 <- posterior_summary(vaccination_data, alpha = 9, beta = 1)) # weakly informative prior
+print(results_beta90 <- posterior_summary(vaccination_data, alpha = 90, beta = 10)) # stronger prior
+```
+
+Is the choice of prior impacting the results? - For groups with large sample size, changing the prior does not significantly affect posterior summaries. For small sample groups (NC Uninsured, WI Uninsured, MS Uninsured), different priors lead to different results.
+
+## Task 2
+
+```{r}
+library(rjags)
+library(coda)
+X <- model.matrix(~ Insurance, data = vaccination_data) 
+model.data <- list(
+  y = vaccination_data$Vaccinated, # number vaccinated children
+  n = vaccination_data$SampleSize, # sample size per group
+  X = X, # design matrix
+  N = nrow(X), # number of observations
+)
+model.inits <- function() {
+  list(
+    alpha0 = rnorm(1, 0, 0.1),
+    alpha1 = rnorm(1, 0, 0.1),
+    alpha2 = rnorm(1, 0, 0.1)
+  )
+}
+jags <- jags.model("model.txt", 
+                    data = model.data, 
+                    inits = model.inits, 
+                    n.chains = 3) # in the example, n chains is 2
+
+# Generate MCMC samples and save output for specified variables
+# I copied this one from the example as well
+out <- coda.samples(jags,
+             c('alpha0', 'alpha1', 'alpha2'),
+             n.iter=10000) # thin = 1 is default
+
+# Posterior summary statistics
+burnin <- 2000
+post_results <- summary(window(out,start=burnin))
+summary(out)
+```
+
+## Task 3
+```{r}
+# code of this chunk is copied from example1
+# History plot & posterior distributions & autocorrelation plot
+par(mar = c(3, 3, 1, 1))
+plot(window(out,start=burnin), trace=TRUE, density = TRUE)   
+
+densplot(out)
+HPDinterval(out)
+
+# Checking correlations
+autocorr.plot(out)
+
+par(mfrow=c(1,1))
+crosscorr.plot(out)
+
+
+# Convergence tests
+
+gelman.diag(out)
+gelman.plot(out,ask=FALSE)
+
+geweke.diag(out)
+geweke.plot(out,ask=FALSE)
+
+# obtain DIC
+dic <- dic.samples(model = jags,
+                   n.iter=1500, 
+                   thin=1)
+```
+alpha values:
+1 - intercept: Uninsured
+2 - insurance: Medicaid
+3 - insurance: Private
+Means to check convergence:
+- traceplots: image 1 shows no upward or downward trends in the traceplots -> good convergence; the chains move freely and have no flat parts -> good mixing and low autocorrelation
+- autocorrelation plots: image 5-7 -> for each parameter * for each chain -> for some chains, the autocorrelation drops slower but still drops for all alpha in each chain
+- Gelman-Rubin Diagnostic (R hat): image 9 -> for all parameters, the R hat value drops to 1 quickly indicating that all chains have converged to the same posterior distribution (there are short periods where the upper percentile is higher but never above 1.1 so no need to increase iterations)
+- Geweke Z-scores: image 10-12: for each chain * each parameter, the majority of z-scores is within [-2, 2], while for example chain 2 has some outliers outside the range, these are very few and overall, the diagnostics are good
+
+R output shows:
+- HPD interval per chain
+- R hat
+- Geweke Z-scores
+
+## Task 4
+Credible Intervals exclude 0 for all alpha -> effect of insurance
+- density plots: images 2-4
+
+```{r}
+pooled <- as.mcmc(do.call(rbind, out))
+pi_uninsured <- plogis(pooled[, "alpha[1]"]) # baseline = uninsured
+pi_medicaid  <- plogis(pooled[, "alpha[1]"] + pooled[, "alpha[2]"]) # baseline + alpha 1 = medicaid
+pi_private   <- plogis(pooled[, "alpha[1]"] + pooled[, "alpha[3]"]) # baseline + alpha 2 = private
+
+q2_results <- data.frame(
+  Insurance = c("Uninsured", "Medicaid", "Private"),
+  Mean = c(mean(pi_uninsured), mean(pi_medicaid), mean(pi_private)), # since this is discrete posterior empirical mean is correct here?
+  LowerHPD = c(HPDinterval(as.mcmc(pi_uninsured))[,1],
+               HPDinterval(as.mcmc(pi_medicaid))[,1],
+               HPDinterval(as.mcmc(pi_private))[,1]),
+  UpperHPD = c(HPDinterval(as.mcmc(pi_uninsured))[,2],
+               HPDinterval(as.mcmc(pi_medicaid))[,2],
+               HPDinterval(as.mcmc(pi_private))[,2])
+)
+print(q2_results)
+```
+Uninsured children have the lowest vaccination coverage, with probability of being vaccinated approx. 71%, while children with Medicaid have a probability of 90% of being vaccinated. The highest probability of being vaccinated is for children with private insurance, where the probability is approx. 93%.
+
+## Task 5
+
+```{r}
+# flat prior
+q1_uniform <- results_uniform[, c("Region", "Insurance", "Mean", "LowerHPD", "UpperHPD")]
+q1_uniform <- q1_uniform[order(q1_uniform$Insurance, q1_uniform$Region), ]
+comparison_uniform <- merge(
+  q1_uniform,        
+  q2_results,        
+  by = "Insurance",  
+  all.x = TRUE,      
+  suffixes = c("_Q1", "_Q2")
+)
+
+# weak prior
+q1_beta9 <- results_beta9[, c("Region", "Insurance", "Mean", "LowerHPD", "UpperHPD")]
+q1_beta9 <- q1_beta9[order(q1_beta9$Insurance, q1_beta9$Region), ]
+comparison_beta9 <- merge(
+  q1_beta9,        
+  q2_results,        
+  by = "Insurance",  
+  all.x = TRUE,      
+  suffixes = c("_Q1", "_Q2")
+)
+
+# strong prior
+q1_beta90 <- results_beta90[, c("Region", "Insurance", "Mean", "LowerHPD", "UpperHPD")]
+q1_beta90 <- q1_beta90[order(q1_beta90$Insurance, q1_beta90$Region), ]
+comparison_beta90 <- merge(
+  q1_beta90,        
+  q2_results,        
+  by = "Insurance",  
+  all.x = TRUE,      
+  suffixes = c("_Q1", "_Q2")
+)
+
+print(comparison_uniform)
+print(comparison_beta9)
+print(comparison_beta90)
+```
+
+## Task 6
+
+```{r}
+pi_uninsured <- plogis(pooled[,1]) # where pooled[,1] are the logit values of alpha1: intercept = uninsured
+pi_medicaid <- plogis(pooled[,1] + pooled[,2]) # add parameter value of alpha2: medicaid to the baseline
+pi_private <- plogis(pooled[,1] + pooled[,3]) # as above for alpha3
+
+pi_private_gt_medicaid <- mean(pi_private > pi_medicaid)
+pi_private_gt_uninsured <- mean(pi_private > pi_uninsured)
+
+print(pi_private_gt_medicaid)
+print(pi_private_gt_uninsured)
+```
+This seems very high, check by looking at the posterior distributions.
+
+```{r}
+density_private   <- density(pi_private)
+density_medicaid  <- density(pi_medicaid)
+density_uninsured <- density(pi_uninsured)
+
+x_min <- min(density_private$x, density_medicaid$x, density_uninsured$x)
+x_max <- max(density_private$x, density_medicaid$x, density_uninsured$x)
+
+y_max <- 100
+
+plot(density_uninsured, col = "blue", lwd = 2, xlim = c(x_min, x_max), ylim = c(0, y_max),
+     xlab = "Vaccination Coverage", main = "Density across Insurance groups")
+
+lines(density_medicaid, col = "green", lwd = 2)
+lines(density_private, col = "red", lwd = 2)
+
+legend("topleft", legend = c("Uninsured", "Medicaid", "Private"),
+       col = c("blue", "green", "red"), lwd = 2)
+```
+## Task 7
+
+```{r}
+# new model with region-specific intercept
+is_medicaid   <- as.numeric(vaccination_data$Insurance == "Medicaid")
+is_private  <- as.numeric(vaccination_data$Insurance == "Private")
+R_2 = length(levels(vaccination_data$Region))
+model_2.data <- list(
+  y = vaccination_data$Vaccinated, # number vaccinated children
+  n = vaccination_data$SampleSize, # sample size per group
+  region_i = as.numeric(vaccination_data$Region), # conversion necessary for indexing in BUGS
+  is_medicaid = is_medicaid,
+  is_private = is_private,
+  N = nrow(vaccination_data), # number of observations
+  R = R_2
+)
+model_2.inits <- function() { # list for same starting points every chain but maybe function could be used if the diagnostics are bad, maybe it fixes high autocorrelation between chains but not sure if the plot shows within chains or between chains
+  list(alpha0 = rnorm(R_2, 0, 0.1),
+       alpha = rnorm(2, 0, 0.1))
+}
+# in the model, the model parameters for dnorm (alpha region) are fixed and not drawn from their own distributions (hyperparameter) but would hierarchy be better? given these are all states from one country? and we have some small sample sizes? and region is considered random? or use a fixed effects model because we compare specific to NC in the later question and we only have few regions
+jags_2 <- jags.model("model_2.txt", 
+                    data = model_2.data, 
+                    inits = model_2.inits, 
+                    n.chains = 3) # in the example, n chains is 2
+
+# Generate MCMC samples and save output for specified variables
+# I copied this one from the example as well
+out_2 <- coda.samples(jags_2,
+             c('alpha0', 'alpha'),
+             n.iter=10000) # thin = 1 is default
+
+# out_2 <- coda.samples(jags_2,
+#                          c("alpha", "alpha0", "mu", "sigma"),
+#                          n.iter = 10000)
+
+# Posterior summary statistics
+burnin <- 2000
+post_results_2 <- summary(window(out_2,start=burnin))
+
+summary(out_2)
+```
+
+```{r}
+# convergence checks
+# code of this chunk is copied from example1
+# History plot & posterior distributions & autocorrelation plot
+par(mar = c(3, 3, 1, 1))
+plot(window(out_2,start=burnin), trace=TRUE, density = TRUE)   
+
+densplot(out_2)
+HPDinterval(out_2)
+
+# Checking correlations
+autocorr.plot(out_2)
+
+par(mfrow=c(1,1))
+crosscorr.plot(out_2)
+
+
+# Convergence tests
+
+gelman.diag(out_2)
+gelman.plot(out_2,ask=FALSE)
+
+geweke.diag(out_2)
+geweke.plot(out_2,ask=FALSE)
+
+# obtain DIC
+dic <- dic.samples(model = jags_2,
+                   n.iter=1500, 
+                   thin=1)
+```
+
+```{r}
+# compare posterior results from Q7 to analytical results from Q1
+# combine all MCMC chains into one matrix
+samples_matrix <- do.call(rbind, out_2)
+
+# extract columns
+alpha0_samples <- samples_matrix[, grep("^alpha0\\[", colnames(do.call(rbind, out_2)))]
+alpha_samples  <- samples_matrix[, grep("^alpha\\[", colnames(do.call(rbind, out_2)))]
+
+# create placeholder matrix which is to be filled with the pi estimates
+n_obs <- nrow(vaccination_data)
+n_samples <- nrow(alpha0_samples)
+pi_matrix <- matrix(NA, nrow = n_samples, ncol = n_obs)
+
+for (i in 1:n_obs) {
+  region_i <- as.numeric(vaccination_data$Region[i])
+  is_medicaid_i <- as.numeric(vaccination_data$Insurance[i] == "Medicaid")
+  is_private_i <- as.numeric(vaccination_data$Insurance[i] == "Private")
+  
+  logits <- alpha0_samples[, region_i] + 
+            alpha_samples[, 1] * is_medicaid_i +
+            alpha_samples[, 2] * is_private_i
+  
+  pi_matrix[, i] <- plogis(logits)
+}
+
+results_q7 <- data.frame(
+  Region = vaccination_data$Region,
+  Insurance = vaccination_data$Insurance,
+  Mean = apply(pi_matrix, 2, mean), # 2 = column-wise and take average of all rows but not sure if the mean function is correct here, can we use it because it is the discrete case?
+  LowerHPD = apply(pi_matrix, 2, function(x) hdi(x)[1]),
+  UpperHPD = apply(pi_matrix, 2, function(x) hdi(x)[2])
+)
+
+comparison_q7_uniform <- merge(q1_uniform, results_q7, by = c("Region", "Insurance"), suffixes = c("_Q1", "_Q7"))
+comparison_q7_beta9 <- merge(q1_beta9, results_q7, by = c("Region", "Insurance"), suffixes = c("_Q1", "_Q7"))
+comparison_q7_beta90 <- merge(q1_beta90, results_q7, by = c("Region", "Insurance"), suffixes = c("_Q1", "_Q7"))
+print(comparison_q7_uniform)
+print(comparison_q7_beta9)
+print(comparison_q7_beta90)
+```
+## Task 8
+
+```{r}
+# not sure if this is correct because I still differentiated for each insurance type but the task isn't specific about insurance
+nc_indices <- which(vaccination_data$Region == "NC")
+ratio <- matrix(NA, nrow = n_samples, ncol = n_obs)
+
+for (i in 1:n_obs) {
+  insurance_type <- vaccination_data$Insurance[i]
+  denominator <- which(vaccination_data$Region == "NC" & vaccination_data$Insurance == insurance_type)
+  ratio[,i] <- pi_matrix[, i] / pi_matrix[, denominator]
+}
+
+results_task8 <- data.frame(
+  Region = vaccination_data$Region,
+  Insurance = vaccination_data$Insurance,
+  Ratio = apply(ratio, 2, mean),
+  LowerHPD = apply(ratio, 2, function(x) hdi(x)[1]),
+  UpperHPD = apply(ratio, 2, function(x) hdi(x)[2])
+)
+
+print(results_task8)
+```
+Here, the ratio column represents the ratio of the vaccination coverage in each region with the vaccination coverage in NC per insurance type. For a ratio = 1, the vaccination coverage in that region is the same as in NC, for a ratio < 1, the vaccination coverage is smaller than in NC and for a ratio > 1, the vaccination coverage is higher.
+
+## Task 9
+
+```{r}
+library(ggplot2)
+means_post <- apply(pi_matrix, 2, mean)
+lower_hpd <- apply(pi_matrix, 2, function(x) hdi(x)[1])
+upper_hpd <- apply(pi_matrix, 2, function(x) hdi(x)[2])
+
+proportions_post <- vaccination_data$Vaccinated / vaccination_data$SampleSize
+
+caterpillar_data <- data.frame(
+  Region = vaccination_data$Region,
+  Insurance = vaccination_data$Insurance,
+  Proportion = proportions_post,
+  Mean = means_post,
+  Lower = lower_hpd,
+  Upper = upper_hpd
+)
+
+caterpillar_data$Label <- paste(caterpillar_data$Region, caterpillar_data$Insurance, sep = " + ")
+
+# order, in the examples I found online it looked nice ordered but here idk
+caterpillar_data$Label <- factor(caterpillar_data$Label, 
+                                 levels = caterpillar_data$Label[order(caterpillar_data$Mean)])
+
+colors <- c("Posterior Mean" = "blue", "Observed Proportion" = "red") # used for legend
+
+plot_q9 <- ggplot(caterpillar_data, aes(x = Mean, y = Label)) +
+  geom_errorbarh(aes(xmin = Lower, xmax = Upper, color = "Posterior Mean"), height = 0.3) +
+  geom_point(aes(color = "Posterior Mean"), size = 2) +
+  geom_point(aes(x = Proportion, color = "Observed Proportion"), shape = 4, size = 2) +
+  scale_color_manual(name = "Legend", values = colors) +
+  labs(
+    title = "Vaccination Coverage per Region + Insurance",
+    x = "Vaccination Coverage",
+    y = "Region + Insurance"
+  ) +
+  theme_minimal()
+
+print(plot_q9)
+```
+
+## Task 10
+
+```{r}
+alpha0_MS <- samples_matrix[, "alpha0[5]"]
+alpha_medicaid <- samples_matrix[, "alpha[1]"]
+
+logit_pred <- alpha0_MS + alpha_medicaid
+pi_pred <- plogis(logit_pred)
+
+predicted_counts <- rbinom(n = length(pi_pred), size = 519, prob = pi_pred)
+
+mean_pred <- mean(predicted_counts)
+hpd_pred <- hdi(predicted_counts)
+
+print(mean_pred)
+print(hpd_pred)
+```
+
