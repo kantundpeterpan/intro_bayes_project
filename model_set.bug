@@ -1,0 +1,25 @@
+model
+  {
+    for (i in 1:N) {
+      logit(p[i]) <- alpha0 + alpha1*anymed[i] + alpha2*unins[i]
+      #y_ij[i] <- alpha0 + alpha1*anymed[i] + alpha2*unins[i]
+      vaccinated[i] ~ dbinom(p[i], total[i])
+      #vaccinated[i] ~ dbinom()
+    }
+    # prior info (only when uniformative)
+    alpha0 ~ dbeta(shape1=1, shape2=1)
+    alpha1 ~ dbeta(shape1=1, shape2=1)
+    alpha2 ~ dbeta(shape1=1, shape2=1)
+    # -> how to specify prior knowledge that y is 90% or higher?
+    
+    
+    # prior info: dnorm instead of dbeta?
+    #prob ~ dbeta(shape1=1, shape2=1)
+    #size ~ dbeta(shape1=1, shape2=1)  
+    
+    # is it correct to model the size between 0-1?
+    # prior should be uninformative
+    # but total sample sizes are integers and between 1 and 500
+  }
+
+
