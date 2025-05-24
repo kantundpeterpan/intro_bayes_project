@@ -1,0 +1,15 @@
+model {
+  for (i in 1:N) {
+    Y[i] ~ dbin(p[i], N_total[i])
+    logit(p[i]) <- alpha0[location[i]] + alpha1 * I_AnyMedicaid[i] + alpha2 * I_Uninsured[i]
+    theta[i] <- p[i]  # Save predicted probability for each observation
+  }
+
+  for (j in 1:NumLocations) {
+    alpha0[j] ~ dnorm(0, 0.001)
+  }
+
+  alpha1 ~ dnorm(0, 0.001)
+  alpha2 ~ dnorm(0, 0.001)
+}
+

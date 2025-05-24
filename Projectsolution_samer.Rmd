@@ -1,0 +1,561 @@
+---
+title: "Project"
+author: "Samer Mheissen"
+date: "2025-04-29"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library("rjags")
+library(coda)
+```
+
+
+```{r}
+beta(381, 40)
+beta(641, 42)
+```
+
+Yij ∼ Binom(πij ,Nij ) logit(πij ) = α0 + α1I(AnyM edicaid,ij) + α2I(U ninsured,ij) , i is the location j is the insurance status πij is the vaccination coverage and I Reference group: Private Insurance Only
+
+```{r}
+library(readxl)
+df <- read_excel("Data.xlsx")
+# Rename columns to simplify
+colnames(df) <- make.names(colnames(df))
+
+# Create indicator variables
+df$I_AnyMedicaid <- as.numeric(df$Insurance== "Any Medicaid")
+df$I_Uninsured <- as.numeric(df$Insurance == "Uninsured")
+
+# Confirm fix
+table(df$I_AnyMedicaid)  
+
+# Total number of observations
+N <- nrow(df)
+
+
+```
+
+#Q1
+we can use Bayesian inference with the Beta–Binomial model:
+x∼Binomial (n,θ)
+Beta prior for θ: θ ∼ Beta(α, β)
+The posterior: θ∣ x,n∼ Beta(α+x,β+n−x)
+
+1-	Uninformative prior (no knowledge): Use Beta(1, 1), the uniform distribution.
+
+For each group, we compute:
+Posterior: 
+Beta(α+x, β+n−x)
+Posterior mean: μ= \frac{\alpha+x}{\alpha+\beta+n}
+Posterior variance: Var(θ)= \frac{\alpha\beta}{\left(\alpha+\beta\right)2\ \left(\alpha+\beta+1\right)}
+Posterior Mode
+Only valid when α> 1and β> 1: Mode= \frac{\alpha-1}{\alpha+\beta-2}
+
+```{r}
+# Set alpha and beta from prior (assumed same for all, or you can vary)
+alpha <- 1
+beta <- 1
+# Function to compute posterior stats
+posterior_stats <- function(x, n, alpha, beta) {
+  post_alpha <- alpha + x
+  post_beta <- beta + n - x
+  
+  mean <- post_alpha / (post_alpha + post_beta)
+  variance <- (post_alpha * post_beta) / (((post_alpha + post_beta)^2) * (post_alpha + post_beta + 1))
+  
+  # Posterior mode only if post_alpha > 1 and post_beta > 1
+  mode <- if (post_alpha > 1 && post_beta > 1) {
+    (post_alpha - 1) / (post_alpha + post_beta - 2)
+  } else {
+    NA
+  }
+  
+  return(c(mean = mean, variance = variance, mode = mode))
+}
+
+# Apply the function row-wise using mapply
+df$Posterior_Mean1 <- mapply(function(x, n) posterior_stats(x, n, alpha, beta)[1],
+                            df$Vaccinated, df$Sample.Size)
+
+df$Posterior_Var1 <- mapply(function(x, n) posterior_stats(x, n, alpha, beta)[2],
+                           df$Vaccinated, df$Sample.Size)
+
+df$Posterior_Mode1 <- mapply(function(x, n) posterior_stats(x, n, alpha, beta)[3],
+                            df$Vaccinated, df$Sample.Size)
+# View the result
+head(df)
+```
+#Q1Part2
+Informative prior (typical coverage ≈ 90%): Beta (9, 1) prior, which has: Mean: 9/10=0.9
+Posterior Summary per Group
+```{r}
+# Set alpha and beta from prior (assumed same for all, or you can vary)
+alpha <- 9
+beta <- 1
+# Function to compute posterior stats
+posterior_stats <- function(x, n, alpha, beta) {
+  post_alpha <- alpha + x
+  post_beta <- beta + n - x
+  
+  mean <- post_alpha / (post_alpha + post_beta)
+  variance <- (post_alpha * post_beta) / (((post_alpha + post_beta)^2) * (post_alpha + post_beta + 1))
+  
+  # Posterior mode only if post_alpha > 1 and post_beta > 1
+  mode <- if (post_alpha > 1 && post_beta > 1) {
+    (post_alpha - 1) / (post_alpha + post_beta - 2)
+  } else {
+    NA
+  }
+  
+  return(c(mean = mean, variance = variance, mode = mode))
+}
+
+# Apply the function row-wise using mapply
+df$Posterior_Mean2 <- mapply(function(x, n) posterior_stats(x, n, alpha, beta)[1],
+                            df$Vaccinated, df$Sample.Size)
+
+df$Posterior_Var2 <- mapply(function(x, n) posterior_stats(x, n, alpha, beta)[2],
+                           df$Vaccinated, df$Sample.Size)
+
+df$Posterior_Mode2 <- mapply(function(x, n) posterior_stats(x, n, alpha, beta)[3],
+                            df$Vaccinated, df$Sample.Size)
+# View the result
+head(df)
+```
+
+#BUGS List
+
+```{r}
+data_list <- list(
+  Y = df$Vaccinated,
+  N_total = df$Sample.Size,
+  I_AnyMedicaid = df$I_AnyMedicaid,
+  I_Uninsured = df$I_Uninsured,
+  N = N
+)
+```
+
+##Model
+
+```{r}
+cat("
+model {
+  for (i in 1:N) {
+    Y[i] ~ dbin(p[i], N_total[i])
+    logit(p[i]) <- alpha0 + alpha1 * I_AnyMedicaid[i] + alpha2 * I_Uninsured[i]
+  }
+
+  alpha0 ~ dnorm(0, 0.001)
+  alpha1 ~ dnorm(0, 0.001)
+  alpha2 ~ dnorm(0, 0.001)
+}
+", file = "logistic_model")
+
+list.files()
+```
+
+#run the model
+
+####****
+library(R2OpenBUGS)
+
+
+
+# Parameters to monitor
+params <- c("alpha0", "alpha1", "alpha2")
+
+# Run the model
+result <- bugs(
+  data = data_list,
+  inits = inits,
+  parameters.to.save = params,
+  model.file = "logistic_model.bug",
+  n.chains = 3,
+  n.iter = 5000,
+  n.burnin = 1000,
+  n.thin = 2,
+  DIC = TRUE
+)
+
+# Results
+print(result)
+exp(result$mean)  # Odds ratios
+
+####*****
+
+#Other library
+
+```{r}
+library(rjags)
+# Initial values
+inits <- function() list(alpha0 = 0, alpha1 = 0, alpha2 = 0)
+# Create the JAGS model object
+jags_model <- jags.model("logistic_model",
+                         data = data_list,
+                         inits = inits,
+                         n.chains = 2)
+
+# Burn-in phase (adapt the number of iterations)
+update(jags_model,
+       variable.names= c("alpha0" , "alpha1" , "alpha2" ),
+       n.iter = 10000,thin=1)
+
+# Sample from the posterior distribution
+samples <- coda.samples(jags_model, variable.names = params, n.iter = 5000)
+
+# View the results
+summary(samples)
+
+
+##OR
+# Burn-in phase (adapt the number of iterations)
+out <- coda.samples(jags_model,
+                    variable.names= c("alpha0" , "alpha1" , "alpha2" ),
+                    n.iter = 10000,thin=1)
+
+# Posterior summary statistics
+burnin <- 2000
+summary(window(out,start=burnin))
+```
+
+#converte to odds ration
+
+```{r}
+exp(c(alpha0 = 2.5632, alpha1 = -0.3786, alpha2 = -1.6404))
+
+```
+##Q3
+###MCMC
+```{r}
+#1 History plot & posterior distributions & autocorrelation plot
+plot(out, trace=TRUE, density = TRUE)   
+plot(window(out,start=burnin), trace=TRUE, density = TRUE)   
+
+densplot(out)
+HPDinterval(out)
+
+# Checking correlations
+autocorr.plot(out)
+
+par(mfrow=c(1,1))
+crosscorr.plot(out)
+# Convergence tests
+
+gelman.diag(out)
+gelman.plot(out,ask=FALSE)
+
+geweke.diag(out)
+geweke.plot(out,ask=FALSE)
+
+# obtain DIC
+dic <- dic.samples(model = jags,
+                   n.iter=1500, 
+                   thin=1)
+```
+
+```{r}
+library(rjags)
+
+# Load model
+model <- jags.model("logistic_model", 
+                    data = data_list, 
+                    inits = inits, 
+                    n.chains = 3, 
+                    n.adapt = 1000)
+
+# Burn-in
+update(model, 5000)
+
+# Sample
+samples <- coda.samples(model, variable.names = c("alpha0", "alpha1", "alpha2"),
+                        n.iter = 10000)
+
+```
+
+```{r}
+plot(samples)
+
+```
+
+##Gelman-Rubin Diagnostic (Potential Scale Reduction Factor)
+
+```{r}
+gelman.diag(samples)
+```
+
+##Autocorrelation plot
+
+```{r}
+autocorr.plot(samples)
+```
+
+##Effective sample size
+
+```{r}
+effectiveSize(samples)
+
+```
+
+\###***Make a plot of the posterior of the model parameters and give posterior summary measures. Interpret the results.***\###
+
+```{r}
+library(coda)
+
+# Assuming `samples` is your mcmc list from `coda.samples`
+plot(samples, density = TRUE)
+
+```
+
+```{r}
+summary(samples)
+```
+
+```{r}
+exp(c(alpha0 = 2.5652, alpha1 = -0.3803, alpha2 = -1.6421))
+
+```
+
+Interpretation: a0=13: children with private insurance have high odds of being vaccinated a1=0.68: Children with Medicaid have 32% lower odds than private insurance children of being vaccinated a2= 0.19 Uninsured children have 81% lower odds than private insurance children of being vaccinated
+
+##GGplot density
+
+```{r}
+library(ggplot2)
+library(dplyr)
+
+# Convert mcmc object to data frame
+samples_df <- as.data.frame(as.matrix(samples))
+
+# Pivot to long format for ggplot
+samples_long <- tidyr::pivot_longer(samples_df, cols = everything())
+
+# Plot densities
+ggplot(samples_long, aes(x = value)) +
+  geom_density(fill = "skyblue", alpha = 0.7) +
+  facet_wrap(~name, scales = "free") +
+  labs(title = "Posterior Distributions", x = "Parameter Value", y = "Density") +
+  theme_minimal()
+
+##histo
+ggplot(samples_long, aes(x = value)) +
+  geom_histogram(fill = "skyblue", alpha = 0.7) +
+  facet_wrap(~name, scales = "free") +
+  labs(title = "Posterior Distributions", x = "Parameter Value", y = "Density") +
+  theme_minimal()
+
+```
+
+Q5 ###\*\*\*\*Give the posterior estimate of the vaccination coverage per region and insurance status. Compare with the analytical results you obtained in Question 1.\*\*\*###
+
+The logit function is the log-odds:
+
+log(π/1−π) =\> π=1/1-exp(-(a0+α1I(AnyM edicaid,ij) + α2I(U ninsured,ij))
+
+```{r}
+# Define the posterior means for the parameters
+alpha0 <- 2.5647
+alpha1 <- -0.3803
+alpha2 <- -1.6421
+
+# Function to compute vaccination probability based on insurance status
+logit_to_pi <- function(alpha0, alpha1, alpha2, I_Medicaid, I_Uninsured) {
+  return(1 / (1 + exp(-(alpha0 + alpha1 * I_Medicaid + alpha2 * I_Uninsured))))
+}
+# Apply the logistic function to compute vaccination probabilities (posterior estimates)
+df$Posterior_Pi <- mapply(logit_to_pi, alpha0 = alpha0, alpha1 = alpha1, alpha2 = alpha2,
+                            I_Medicaid = df$I_AnyMedicaid, I_Uninsured = df$I_Uninsured)
+
+# Print the updated data with the posterior estimates
+print(df)
+```
+
+#Q6 Logistic model: Private insurance: π Private= logit−1(α0)
+
+Any Medicaid:π medicaid=logit−1(α0+α1)
+
+Uninsured:πuninsured=logit−1(α0+α2)
+
+```{r}
+# Suppose you have MCMC samples in vectors:
+# alpha0_samples, alpha1_samples, alpha2_samples
+
+# Compute vaccination probabilities for each draw
+pi_private <- 1 / (1 + exp(-alpha0))
+pi_medicaid <- 1 / (1 + exp(-(alpha0 + alpha1)))
+pi_uninsured <- 1 / (1 + exp(-(alpha0 + alpha2)))
+
+# Calculate proportion of samples where private > medicaid
+P_private_gt_medicaid <- mean(pi_private > pi_medicaid)
+
+# Calculate proportion of samples where private > uninsured
+P_private_gt_uninsured <- mean(pi_private > pi_uninsured)
+
+# Show results
+cat("P(Private > Medicaid):", P_private_gt_medicaid, "\n")
+cat("P(Private > Uninsured):", P_private_gt_uninsured, "\n")
+
+```
+
+Q7
+
+```{r}
+file.show("modelq7.txt")
+
+```
+
+```{r}
+# Create the data list
+data_list <- list(
+  Y = df$Vaccinated,             # Dependent variable
+  N_total = df$Sample.Size,      # Total number of trials (sample size)
+  I_AnyMedicaid = df$I_AnyMedicaid,  
+  I_Uninsured = df$I_Uninsured,
+  location = as.numeric(factor(df$Geography)),  
+  NumLocations = length(unique(df$Geography)),
+  N = nrow(df)                   # Total number of observations
+)
+
+# Run JAGS model
+jags_model <- jags.model("modelq7.txt", data = data_list, n.chains = 2, inits = inits)
+
+
+# Burn-in phase
+update(jags_model, n.iter = 1000)
+
+# Sampling
+samplesuni <- coda.samples(jags_model, variable.names = c("alpha0", "alpha1", "alpha2"), n.iter = 10000,thin=1)
+# View the results
+summary(samplesuni)
+
+
+##OR
+# Burn-in phase (adapt the number of iterations)
+out1 <- coda.samples(jags_model,
+                    variable.names= c("alpha0" , "alpha1" , "alpha2" ),
+                    n.iter = 10000,thin=1)
+
+# Posterior summary statistics
+burnin <- 2000
+summary(window(out1,start=burnin))
+# Check convergence
+library(coda)
+gelman.diag(samplesuni)
+effectiveSize(samplesuni)
+##
+par(mfrow=c(3,3))
+traceplot(samplesuni)
+
+```
+#Summary:
+All your parameters (alpha0[1] through alpha2) have PSRFs around 1.0 to 1.01, which suggests your chains have converged well and mixing is good.
+ESS reflects the number of independent samples the chain is equivalent to, after accounting for autocorrelation.
+High ESS values (thousands in your case) are excellent, showing that chains provide a lot of effective information.
+The effective sample sizes are large (thousands), meaning low autocorrelation and reliable posterior estimates.
+```{r}
+summary(samplesuni)
+```
+
+```{r}
+
+# Define posterior means
+alpha0_means <- c(2.7027, 2.5819, 2.4313, 2.7541, 2.3425)
+alpha1_mean <- -0.4159
+alpha2_mean <- -1.6402
+
+# Define inverse logit function
+inv_logit <- function(x) 1 / (1 + exp(-x))
+
+# Calculate vaccination probabilities
+coverage <- data.frame(
+  location = c("North Carolina", "Georgia", "Wisconsin", "Florida", "Mississippi"),
+  Private   = inv_logit(alpha0_means),
+  Medicaid  = inv_logit(alpha0_means + alpha1_mean),
+  Uninsured = inv_logit(alpha0_means + alpha2_mean)
+)
+
+# Round the numeric columns separately
+coverage[ ,2:4] <- round(coverage[ ,2:4], 3)
+
+# Print the rounded results
+print(coverage)
+
+
+```
+
+Q8
+```{r}
+# Get the vaccination coverage for North Carolina
+north_carolina_coverage <- coverage[coverage$location == "North Carolina", 2:4]
+
+# Calculate the ratios θij for each location compared to North Carolina (inverted ratio)
+coverage$theta_private <- coverage$Private/north_carolina_coverage$Private
+coverage$theta_medicaid <- coverage$Medicaid/north_carolina_coverage$Medicaid
+coverage$theta_uninsured <-  coverage$Uninsured/north_carolina_coverage$Uninsured
+
+# Print the updated coverage with the θij ratios
+print(coverage)
+```
+Florida shows sligtly higher vaccination coverage in all categories (Private, Medicaid, Uninsured) compared to North Carolina.
+All other states show lower coverage across all categories. The vaccination coverage for uninsured individuals is consistently below that of North Carolina in Wisconsin and Mississippi.
+
+Q9
+```{r}
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+##
+data_long <- coverage %>%
+  pivot_longer(cols = c("Private", "Medicaid", "Uninsured"),
+               names_to = "InsuranceStatus", values_to = "PosteriorMean") %>%
+  mutate(InsuranceStatus = recode(InsuranceStatus, 
+                                  "Private" = "Private Insurance",
+                                  "Medicaid" = "Medicaid",
+                                  "Uninsured" = "Uninsured"))
+
+
+# Plotting the caterpillar plot for posterior means
+ggplot(data_long, aes(x = PosteriorMean, y = interaction(location, InsuranceStatus), color = InsuranceStatus)) +
+  geom_point(size = 3) +
+  geom_segment(aes(x = 0, xend = PosteriorMean, yend = interaction(location, InsuranceStatus)),
+               color = "grey") + 
+  scale_x_continuous(labels = scales::percent_format(scale = 1)) +
+  labs(
+    x = "Posterior Mean Vaccination Coverage",
+    y = "Location and Insurance Status",
+    color = "Insurance Status",
+    title = "Caterpillar Plot: Posterior Means for Vaccination Coverage by Location and Insurance Status"
+  ) +
+  theme_minimal()
+```
+
+
+Q10
+```{r}
+# Parameters from your model
+alpha0_mississippi <- 2.3425
+alpha1_medicaid <- -0.4159
+
+# Inverse logit function
+inv_logit <- function(x) 1 / (1 + exp(-x))
+
+# Calculate vaccination probability for Medicaid in Mississippi
+p_medicaid_mississippi <- inv_logit(alpha0_mississippi + alpha1_medicaid)
+
+# Number of Medicaid-insured children
+n_medicaid <- 519
+
+# Predicted number vaccinated
+predicted_vaccinated <- n_medicaid * p_medicaid_mississippi
+
+# Print results
+print(predicted_vaccinated)
+cat("Predicted number vaccinated among", n_medicaid, "children:", round(predicted_vaccinated), "\n")
+
+```
+
