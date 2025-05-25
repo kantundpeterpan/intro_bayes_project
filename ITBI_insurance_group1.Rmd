@@ -1,0 +1,266 @@
+
+---
+title: "Bayesian Project 1: Insurance"
+author: "Your Name"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(rjags)
+library(coda)
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(bayesplot)
+library(tibble)
+```
+
+# Question 1: Analytical Posterior using Conjugate Prior
+
+We assume:
+- The likelihood is Binomial: $Y_{ij} \sim \text{Binomial}(n_{ij}, \theta_{ij})$
+- We use two $\beta$-priors:
+  - (a) Weakly-informative prior: $\text{Beta}(1, 1)$
+  - (b) Informative prior reflecting 90% coverage: $\text{Beta}(90, 10)$
+
+```{r q1}
+data <- tribble(
+  ~Region, ~Insurance, ~Vaccinated, ~n_samples,
+  "North Carolina", "Any Medicaid", 380, 419,
+  "North Carolina", "Private Insurance", 632, 673,
+  "North Carolina", "Uninsured", 28, 34,
+  "Georgia", "Any Medicaid", 363, 396,
+  "Georgia", "Private Insurance", 527, 576,
+  "Georgia", "Uninsured", 36, 50,
+  "Wisconsin", "Any Medicaid", 282, 332,
+  "Wisconsin", "Private Insurance", 514, 548,
+  "Wisconsin", "Uninsured", 16, 34,
+  "Florida", "Any Medicaid", 446, 490,
+  "Florida", "Private Insurance", 588, 628,
+  "Florida", "Uninsured", 28, 39,
+  "Mississippi", "Private Insurance", 400, 441,
+  "Mississippi", "Uninsured", 27, 32
+) %>%
+  mutate(post_a_noninf = Vaccinated + 1,
+         post_b_noninf = n_samples - Vaccinated + 1,
+         mean_noninf = post_a_noninf / (post_a_noninf + post_b_noninf),
+         post_a_inf = Vaccinated + 90,
+         post_b_inf = n_samples - Vaccinated + 10,
+         mean_inf = post_a_inf / (post_a_inf + post_b_inf))
+data
+```
+
+When comparing two priors for vaccination coverage ($\theta$), the results show that using an informative prior pushes estimates closer to 90%, especially for smaller sample sizes. When you there is not much data, the prior belief has more influence on the posterior hence small groups are more sensitive to prior choice.
+
+# Question 2: Logistic Regression Model in BUGS Language
+
+```{r q2 model definition}
+cat("
+model {
+  for (i in 1:N) {
+    Y[i] ~ dbin(p[i], n[i])
+    logit(p[i]) <- alpha0 + alpha1 * x1[i] + alpha2 * x2[i]
+  }
+  alpha0 ~ dnorm(0, 0.0001)
+  alpha1 ~ dnorm(0, 0.0001)
+  alpha2 ~ dnorm(0, 0.0001)
+}
+", file = "q2_logistic_model.txt")
+```
+
+
+
+```{r q2}
+model_df <- data %>%
+  mutate(x1 = as.numeric(Insurance == "Any Medicaid"),
+         x2 = as.numeric(Insurance == "Uninsured"))
+
+model_data <- list(
+  Y = model_df$Vaccinated,
+  n = model_df$n_samples,
+  x1 = model_df$x1,
+  x2 = model_df$x2,
+  N = nrow(model_df)
+)
+
+inits <- function() list(alpha0 = 0, alpha1 = 0, alpha2 = 0)
+
+params <- c("alpha0", "alpha1", "alpha2")
+
+model <- jags.model("q2_logistic_model.txt", data = model_data, inits = inits, n.chains = 5)
+update(model, 1000)
+output <- coda.samples(model, params, n.iter = 10000)
+summary(output)
+```
+
+## Question 3
+Run the MCMC method and check convergence of the MCMC chains.
+Give the details on how you checked convergence.
+
+```{r q3}
+plot(output)
+gelman.diag(output)
+geweke.diag(output)
+
+mcmc_dens_overlay(output) + 
+  ggtitle("Posterior Density Overlay") + 
+  theme_minimal()
+
+mcmc_acf(output) + 
+  ggtitle("Autocorrelation per Parameter")
+```
+Convergence was checked by assessing a variety of plots, as seen above. 
+*The trace plots* for all three parameters (alpha0, alpha1, alpha2) show stable and consistent behavior across iterations, without visible trends or drifts. All chains exhibit good mixing and appear as “stationary noise” around a fixed mean, which is indicative of convergence to the target posterior distribution. This aligns with best practices outlined by Gelman et al. (2013) and the recommendations in the coda documentation.
+
+*The posterior densities* for all five chains largely overlap for each parameter. For alpha0, alpha1, and alpha2, the densities are nearly identical in shape and location, suggesting that all chains have explored the same region of the posterior space. This strong agreement between chains provides visual confirmation of convergence, as described in Gabry & Mahr's bayesplot documentation and Stan's user guide on MCMC diagnostics.
+
+*The autocorrelation* functions for all parameters and chains decay rapidly, approaching zero within approximately 10 lags. This indicates low within-chain correlation and efficient mixing, which translates to higher effective sample sizes (ESS). Such behavior is desirable and signals that the chains are producing nearly independent samples. These results follow expectations from Plummer (2006) and Hartig (2011).
+
+Collectively, all analyses provide strong evidence of convergence. All chains exhibit stationarity, good overlap, and low autocorrelation. Based on these diagnostics, we can conclude that the posterior samples are reliable, and inference based on these samples can proceed with confidence.
+
+## Question 4 
+Make a plot of the posterior of the model parameters and give posterior
+summary measures. Interpret the results.
+
+```{r q4}
+densplot(output)
+```
+
+```{r q5-6-estimates}
+logit_to_prob <- function(lp) { exp(lp) / (1 + exp(lp)) }
+output_matrix <- as.matrix(output)
+coverage_private <- logit_to_prob(output_matrix[, "alpha0"])
+coverage_medicaid <- logit_to_prob(output_matrix[, "alpha0"] + output_matrix[, "alpha1"])
+coverage_uninsured <- logit_to_prob(output_matrix[, "alpha0"] + output_matrix[, "alpha2"])
+
+mean(coverage_private > coverage_medicaid)
+mean(coverage_private > coverage_uninsured)
+```
+
+# Question 7: Add Location-Specific Intercept
+Secondly, investigate whether the vaccination coverages are distinct at
+the diﬀerent locations by adding a location-specific intercept.
+$$
+\text{logit}(\pi_{ij}) = \alpha_{0i} + \alpha_1 I_{AnyMedicaid} + \alpha_2 I_{Uninsured}
+$$
+Assume non-informative priors for the parameters to be estimated.
+Write the code in BUGS language. Give a brief summary of the conver-
+gence checks you performed. Compare posteriors of vaccination cover-
+ages with results from Question 1.
+
+```{r q7-model}
+cat("
+model {
+  for (i in 1:N) {
+    Y[i] ~ dbin(p[i], n[i])
+    logit(p[i]) <- alpha0[region[i]] + alpha1 * x1[i] + alpha2 * x2[i]
+  }
+  for (j in 1:NumRegions) {
+    alpha0[j] ~ dnorm(0, 0.0001)
+  }
+  alpha1 ~ dnorm(0, 0.0001)
+  alpha2 ~ dnorm(0, 0.0001)
+}
+", file = "q7_logistic_model.txt")
+```
+
+```{r q7}
+data$RegionID <- as.numeric(factor(data$Region))
+model_df2 <- data %>%
+  mutate(x1 = as.numeric(Insurance == "Any Medicaid"),
+         x2 = as.numeric(Insurance == "Uninsured"),
+         region = RegionID)
+
+model_data2 <- list(
+  Y = model_df2$Vaccinated,
+  n = model_df2$n_samples,
+  x1 = model_df2$x1,
+  x2 = model_df2$x2,
+  region = model_df2$region,
+  N = nrow(model_df2),
+  NumRegions = length(unique(model_df2$region))
+)
+
+model2 <- jags.model("q7_logistic_model.txt", data = model_data2, inits = inits, n.chains = 5)
+update(model2, 1000)
+output2 <- coda.output(model2, c("alpha0", "alpha1", "alpha2"), n.iter = 10000)
+summary(output2)
+```
+
+## Question 8
+Compare the vaccination coverage in each of the location with the
+vaccination coverage in North Carolina:
+
+$$
+\theta_{ij} = \frac{\pi_{ij}}{\pi_{\text{NorthCarolina},j}}
+$$
+
+```{r q8}
+output_mat2 <- as.matrix(output2)
+region_names <- levels(factor(data$Region))
+north_carolina_idx <- which(region_names == "North Carolina")
+logit_nc <- output_mat2[, paste0("alpha0[", north_carolina_idx, "]")]
+
+region_ratios <- sapply(1:length(region_names), function(i) {
+  logit_i <- output_mat2[, paste0("alpha0[", i, "]")]
+  plogis(logit_i) / plogis(logit_nc)
+})
+
+region_ratios_df <- as.data.frame(region_ratios)
+colnames(region_ratios_df) <- region_names
+summary(region_ratios_df)
+```
+
+## Question 9
+Make a caterpillar plot of the estimated coverage (per location and
+insurance status). Include also the observed vaccination proportion in
+the plot.
+
+```{r q9}
+theta_df <- do.call(rbind, lapply(1:length(region_names), function(i) {
+  tibble(
+    Region = region_names[i],
+    Mean = mean(plogis(output_mat2[, paste0("alpha0[", i, "]")])),
+    Lower = quantile(plogis(output_mat2[, paste0("alpha0[", i, "]")]), 0.025),
+    Upper = quantile(plogis(output_mat2[, paste0("alpha0[", i, "]")]), 0.975)
+  )
+}))
+
+ggplot(theta_df, aes(x = reorder(Region, Mean), y = Mean)) +
+  geom_point() +
+  geom_errorbar(aes(ymin = Lower, ymax = Upper), width = 0.2) +
+  labs(x = "Region", y = "Estimated Vaccination Coverage", title = "Caterpillar Plot") +
+  theme_minimal() +
+  coord_flip()
+```
+
+## Question 10: Predict for Mississippi Any Medicaid
+
+```{r q10}
+mississippi_idx <- which(region_names == "Mississippi")
+pred_miss <- rbinom(n = 10000, size = 519,
+                    prob = plogis(output_mat2[, paste0("alpha0[", mississippi_idx, "]")] + output_mat2[, "alpha1"]))
+
+summary(pred_miss)
+hist(pred_miss, breaks = 30, main = "Predicted Vaccinated in Mississippi (Any Medicaid, n = 519)",
+     xlab = "Predicted Vaccinated Count")
+```
+
+# References
+
+- Gelman, A., Carlin, J. B., Stern, H. S., Dunson, D. B., Vehtari, A., & Rubin, D. B. (2013). *Bayesian Data Analysis* (3rd ed.). Chapman and Hall/CRC.
+
+- Gelman, A., & Rubin, D. B. (1992). Inference from iterative simulation using multiple sequences. *Statistical Science*, 7(4), 457–472. https://doi.org/10.1214/ss/1177011136
+
+- Geweke, J. (1992). Evaluating the accuracy of sampling-based approaches to the calculation of posterior moments. In J. M. Bernardo, J. O. Berger, A. P. Dawid, & A. F. M. Smith (Eds.), *Bayesian Statistics 4* (pp. 169–193). Oxford University Press.
+
+- Plummer, M., Best, N., Cowles, K., & Vines, K. (2006). CODA: Convergence diagnosis and output analysis for MCMC. *R News*, 6(1), 7–11. https://cran.r-project.org/doc/Rnews/
+
+- Gabry, J., & Mahr, T. (2022). *bayesplot: Plotting for Bayesian models* [R package version 1.10.0]. https://mc-stan.org/bayesplot/
+
+- Hartig, F. (2011). *MCMC convergence diagnostics with coda in R* [Blog post]. Theoretical Ecology. https://theoreticalecology.wordpress.com/2011/12/02/mcmc-convergence-diagnostics-with-coda-in-r/
+
+- Stan Development Team. (2024). *Stan User’s Guide*. https://mc-stan.org/docs/stan-users-guide/
+
