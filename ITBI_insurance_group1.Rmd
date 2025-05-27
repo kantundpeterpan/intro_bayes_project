@@ -94,6 +94,7 @@ update(model, 1000)
 output <- coda.samples(model, params, n.iter = 10000)
 summary(output)
 ```
+The vague normal priors allowed for the estimation of posterior vaccine coverage and differences across insurance groups. Dummy variables enable comparison to the baseline group (private insurance).
 
 ## Question 3
 Run the MCMC method and check convergence of the MCMC chains.
@@ -116,8 +117,8 @@ Convergence was checked by assessing a variety of plots, as seen above.
 
 *The posterior densities* for all five chains largely overlap for each parameter. For alpha0, alpha1, and alpha2, the densities are nearly identical in shape and location, suggesting that all chains have explored the same region of the posterior space. This strong agreement between chains provides visual confirmation of convergence, as described in Gabry & Mahr's bayesplot documentation and Stan's user guide on MCMC diagnostics.
 
-*The autocorrelation* functions for all parameters and chains decay rapidly, approaching zero within approximately 10 lags. This indicates low within-chain correlation and efficient mixing, which translates to higher effective sample sizes (ESS). Such behavior is desirable and signals that the chains are producing nearly independent samples. These results follow expectations from Plummer (2006) and Hartig (2011).
-
+*The autocorrelation* functions for all parameters and chains decay rapidly, approaching zero within approximately 10 lags. This indicates low within-chain correlation and efficient mixing, which translates to higher effective sample sizes (ESS). Such behavior is desirable and signals that the chains are producing nearly independent samples (Plummer, 2006; Hartig, 2011).
+ 
 Collectively, all analyses provide strong evidence of convergence. All chains exhibit stationarity, good overlap, and low autocorrelation. Based on these diagnostics, we can conclude that the posterior samples are reliable, and inference based on these samples can proceed with confidence.
 
 ## Question 4 
@@ -127,6 +128,19 @@ summary measures. Interpret the results.
 ```{r q4}
 densplot(output)
 ```
+- $\alpha_0$  reflects the log-odds of vaccination for children with private insurance.
+
+- $\alpha_1$ and $\alpha_2$  are log-odds differences compared to private insurance, for Medicaid and uninsured groups, respectively. \\
+
+Posterior densities and HPD intervals showed that:
+
+Children with Medicaid had significantly lower odds of vaccination than those with private insurance.
+The uninsured group had even lower odds, indicating systematic dicrepancies in coverage across insurance types.
+
+# Question 5 
+Give the posterior estimate of the vaccination coverage per region and
+insurance status. Compare with the analytical results you obtained in
+Question 1.
 
 ```{r q5-6-estimates}
 logit_to_prob <- function(lp) { exp(lp) / (1 + exp(lp)) }
@@ -138,8 +152,23 @@ coverage_uninsured <- logit_to_prob(output_matrix[, "alpha0"] + output_matrix[, 
 mean(coverage_private > coverage_medicaid)
 mean(coverage_private > coverage_uninsured)
 ```
+Vaccination coverage $\pi$ was derived from $\alpha$ -values using inverse logit transformations. These estimates were compared to those from Question 1. Differences were especially pronounced for uninsured groups, highlighting the impact of modeling structure and covariate pooling in logistic regression versus independent binomial models.
 
-# Question 7: Add Location-Specific Intercept
+# Question 6
+Based on the logistic regression model, what is the probability (a pos-
+teriori) that coverage amongst children that have private insurance is
+higher than amongst children that have any medicaid? And compared
+to children with no insurance?
+
+Furthermore, posterior probabilities were calculated:
+
+\[
+P(\pi_{\text{private}} > \pi_{\text{Medicaid}}) \quad \text{and} \quad P(\pi_{\text{private}} > \pi_{\text{Uninsured}})
+\]
+
+Both probabilities were near 1 as code above demonstrates, indicating strong posterior evidence that private insurance is associated with higher vaccination rates.
+
+# Question 7
 Secondly, investigate whether the vaccination coverages are distinct at
 the diﬀerent locations by adding a location-specific intercept.
 $$
@@ -188,6 +217,7 @@ update(model2, 1000)
 output2 <- coda.output(model2, c("alpha0", "alpha1", "alpha2"), n.iter = 10000)
 summary(output2)
 ```
+Convergence diagnostics mirrored earlier checks and supported convergence once again. This model allowed regional heterogeneity to be captured more explicitly. Comparison with Question 1 showed that posterior coverage estimates aligned more closely for larger strata, but differences remained for uninsured children, reflecting the benefit of partial pooling (Lesaffre, E., & Lawson, A. B., 2012).
 
 ## Question 8
 Compare the vaccination coverage in each of the location with the
@@ -212,6 +242,7 @@ region_ratios_df <- as.data.frame(region_ratios)
 colnames(region_ratios_df) <- region_names
 summary(region_ratios_df)
 ```
+This output quantifies how other states' coverage rates compared to North Carolina. Many groups had lower relative coverage, especially among uninsured and Medicaid children.
 
 ## Question 9
 Make a caterpillar plot of the estimated coverage (per location and
@@ -235,6 +266,7 @@ ggplot(theta_df, aes(x = reorder(Region, Mean), y = Mean)) +
   theme_minimal() +
   coord_flip()
 ```
+Posterior means and HPD intervals were visualized for each Geography × Insurance combination. Observed vaccination proportions were also plotted for reference. This made  the uncertainty visible in estimates and allowed easy ranking of groups by coverage.
 
 ## Question 10: Predict for Mississippi Any Medicaid
 
@@ -261,6 +293,8 @@ hist(pred_miss, breaks = 30, main = "Predicted Vaccinated in Mississippi (Any Me
 - Gabry, J., & Mahr, T. (2022). *bayesplot: Plotting for Bayesian models* [R package version 1.10.0]. https://mc-stan.org/bayesplot/
 
 - Hartig, F. (2011). *MCMC convergence diagnostics with coda in R* [Blog post]. Theoretical Ecology. https://theoreticalecology.wordpress.com/2011/12/02/mcmc-convergence-diagnostics-with-coda-in-r/
+
+- Lesaffre, E., & Lawson, A. B. (2012). *Bayesian Biostatistics*. John Wiley & Sons.
 
 - Stan Development Team. (2024). *Stan User’s Guide*. https://mc-stan.org/docs/stan-users-guide/
 
