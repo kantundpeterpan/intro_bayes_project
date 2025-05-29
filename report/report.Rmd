@@ -429,19 +429,68 @@ cat(q7_jags_str)
 
 Convergence was checked in a similar way as for the model defined in Question 3. In brief, trace plots showed the expected caterpillar pattern,  posterior densities per parameter and chain showed superposed well and autocorrelation plots revealed decreasing autocorrelation with increasing lag number - all indicating convergence.
 
+
+```{r traceplots q7}
+mcmc_trace(q7_mcmc[,beta_params]) + 
+  legend_move('top') + 
+  theme(axis.text.x = element_text(angle = 45))
+```
+
+```{r density plots q7}
+ggplot(beta_plot_df, aes(x = value, color = factor(chain))) +
+  geom_density() +
+  facet_wrap(~ parameter, scales = "free") +
+  labs(x = "Parameter Value", y = "Density", color = "Chain",
+       title = "Posterior Density by Parameter and Chain") +
+  theme_minimal()
+```
+
+```{r autocorrelation plots q7}
+mcmc_acf(q7_mcmc[, beta_params]) +
+  ggtitle("Autocorrelation of beta parameters")
+```
+
+```{r gelman q7}
+gelman_q7 <- kbl(
+  gelman_table,
+  digits = 3,
+  format = "latex",
+  booktabs = T,
+  caption = "$\\hat{R}$ diagnostics for beta parameters (Gelman-Rubin)."
+) %>% column_spec(2, width = "2.5cm")
+
+#writeLines(gelman_q7, "gelman_q7.tex")
+gelman_q7
+```
+
+```{r geweke q7}
+geweke_q7 <- kbl(
+  geweke_table,
+  digits = 3,
+  format = "latex",
+  booktabs = T,
+  caption = "$Geweke $z$-scores for beta parameters. Values outside $[-2, 2]$ may indicate lack of convergence."
+) %>% column_spec(2, width = "2.5cm")
+
+#writeLines(geweke_q7, "geweke_q7.tex")
+geweke_q7
+```
+
 ```{r tbl-q7-post}
 # cols <- colnames(q5)
 # cols[8] = "$\\Delta_{Beta(150,7)}$"
 
-kbl(
+latex_table <- kbl(
     q7,
     digits = 3,
-    # format = 'latex',
+    format = 'latex',
     booktabs = T,
     escape = F,
     linesep = c('', '', '\\addlinespace'),
-    caption = 'Posterior estimates of mean vaccine coverages from the logistic regression model including a region specific intercept vs. estimates from conjugate pair modeling. Subscripts indicate whether the esimates was obtained from logistic regression or the chosen prior distribution, respectively. $\\Delta_{Beta(\\alpha, \\beta)}$ gives the difference between posterior estimates from the logistic regression model and conjugate pair modeling. Vaccine coverage for MS/Medicaid can only be obtained from the logistic regression model.'
+    #caption = 'Posterior estimates of mean vaccine coverage obtained from a logistic regression model with region-specific intercepts compared to estimates from conjugate prior modeling. Subscripts indicate whether the estimate was derived from the logistic regression model or from a specified prior distribution. $\\Delta_{Beta(\\alpha, \\beta)}$ gives the difference between the logistic regression posterior and the corresponding conjugate prior posterior. Vaccine coverage for MS/Medicaid is only available from the logistic regression model.'
   ) %>% column_spec(2, width = "2.5cm")
+#writeLines(latex_table, "output_q7.tex")
+latex_table
 ```
 
 ```{r fig-q7-comp}

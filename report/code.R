@@ -1,7 +1,7 @@
 # List of required packages
 required_packages <- c(
   "tidyr", "dplyr", "ggplot2", "kableExtra", "gridExtra",
-  "rjags", "R2jags", "bayesplot", "glue", "latex2exp",
+  "ggplot2", "rjags", "R2jags", "bayesplot", "glue", "latex2exp",
   "stringr", "ggridges"
 )
 
@@ -18,6 +18,7 @@ library(dplyr)
 library(ggplot2)
 library(kableExtra)
 library(gridExtra)
+library(ggplot2)
 library(rjags)
 library(R2jags)
 library(bayesplot)
@@ -434,6 +435,40 @@ q7_model_run <- jags(
 # convert output to data.frame
 q7_mcmc <- as.mcmc(q7_model_run)
 q7_mcmcdf <- mcmc.as.data.frame(q7_mcmc)
+
+beta_params <- paste0("beta[", 1:7, "]")
+
+beta_plot_df <- q7_mcmcdf %>% 
+  select(beta_params, chain) %>%
+  pivot_longer(
+    cols = all_of(beta_params),
+    names_to = "parameter",
+    values_to = "value")
+
+beta_labels <- c(
+  "Intercept (GA, Private)",
+  "Florida",
+  "Mississippi",
+  "North Carolina",
+  "Wisconsin",
+  "Any Medicaid",
+  "Uninsured"
+)
+
+gelman_result <- gelman.diag(q7_mcmc[, beta_params])
+gelman_table <- as.data.frame(gelman_result$psrf)
+rownames(gelman_table) <- beta_labels
+
+geweke_result <- geweke.diag(q7_mcmc[, beta_params])
+z_list <- lapply(geweke_result, function(x) x$z)
+z_matrix <- do.call(rbind, z_list)
+z_avg <- colMeans(z_matrix, na.rm = TRUE)
+geweke_table <- data.frame(
+  Parameter = beta_labels,
+  `Z-score` = round(z_avg, 3)
+)
+rownames(geweke_table) <- beta_labels
+colnames(geweke_table) <- "Z-score"
 
 # extract indices corresponding to coverage parameters
 pi_idx <- grepl("coverage", colnames(q7_mcmcdf))
