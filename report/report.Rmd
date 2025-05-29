@@ -557,6 +557,7 @@ knitr::kable(
 ```
 
 ```{r}
+setwd("./export/figures")
 q10_ppddf %>% 
   ggplot(aes(x = value)) +
   geom_histogram(bins = 22, aes(y = ..density..),
@@ -564,6 +565,7 @@ q10_ppddf %>%
   geom_density() +
   theme_minimal() +
   xlab(TeX("$\\Y^{(s)}$"))
+ggsave("fig_ppd_ms_mediaid.png")
 ```
 
 The posterior predictive mean for a new sample from the MS/Medicaid population with $n=519$ is $\hat Y^{S+1} = `r q10_final[,'Mean']`$. With a posterior probability of 95% $\tilde{y}$ lies in  $\left[`r q10_final[,'LL']`, `r q10_final[,'UL']`\right]$.
