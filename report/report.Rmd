@@ -482,7 +482,7 @@ Make a caterpillar plot of the estimated coverage (per location and insurance st
 :::
 
 ```{r}
-
+setwd("./export/figures")
 # Create combined labels and order by mean values
 posterior_df <- q7_post_summary %>%
   mutate(Label = paste(Geography, "-", Insurance)) %>%
@@ -510,6 +510,8 @@ ggplot(posterior_df, aes(x = Mean, y = reorder(Label, Mean), color = Insurance))
   scale_color_brewer(palette = "Set1") +
   geom_vline(xintercept = mean(posterior_df$Mean), linetype = "dashed", 
              color = "gray50", alpha = 0.7)
+ggsave("fig.caterpill.png")
+
 ```
 
 
