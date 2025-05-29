@@ -491,13 +491,30 @@ posterior_df <- q7_post_summary %>%
 # Add row number for visualization
 posterior_df$row_id <- 1:nrow(posterior_df)
 
+# observed coverage
+obs_coverage <- vaccination_data %>% 
+  select(Geography, Insurance, Vaccinated, SampleSize) %>%
+  mutate(obs_cov = (Vaccinated / SampleSize),
+         Label = paste(Geography, "-", Insurance)) %>%
+  select(-Geography, -Insurance, -Vaccinated, -SampleSize)
+
+posterior_df <- full_join(obs_coverage, posterior_df, by = "Label")
+
+
 # Create the caterpillar plot
 fig.caterpill <- ggplot(posterior_df, aes(x = Mean, y = reorder(Label, Mean), color = Insurance)) +
   geom_point(size = 3) +
   geom_errorbarh(aes(xmin = LL, xmax = UL), height = 0.2) +
+  
+  # Observed coverage as second layer
+  geom_point(aes(x = obs_cov, shape = "Observed Coverage"), 
+             size = 3, color = "grey30", alpha = 0.5) +
+  # 
+  scale_color_brewer(palette = "Set1") +
+  scale_shape_manual(name = "", values = c("Observed Coverage" = 15)) +
   labs(
-    title = "Caterpillar Plot of Posterior Means \n with Credible Intervals",
-    subtitle = "Ordered by posterior mean values",
+    #title = "Caterpillar Plot of Posterior Means \n with Credible Intervals",
+    #subtitle = "Ordered by posterior mean values",
     x = "Posterior Mean",
     y = ""
   ) +
