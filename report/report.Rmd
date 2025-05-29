@@ -418,6 +418,26 @@ $$
 Assume non-informative priors for the parameters to be estimated. Write the code in BUGS language. Give a brief summary of the convergence checks you performed. Compare posteriors of vaccination coverages with results from Question 1.
 :::
 
+### Model Explanation
+
+To model the effect of location and insurance type on vaccination coverage, we fit a logistic regression model:
+
+$$
+\text{logit}(\pi_t) = \mathbf{X}_t \boldsymbol{\beta}
+$$
+
+The likelihood is:
+$$
+y_t \sim \text{Binomial}(\pi_t, K_t), \quad \text{with} \quad \text{logit}(\pi_t) = \sum_{j=1}^p X_{tj} \cdot \beta_j
+$$
+
+where:
+* \( y_t \) is the observed number of vaccinated children in group \( t \).
+* \( K_t \) is the sample size in group \( t \).
+* \( \pi_t \) is the vaccination probability in group \( t \).
+* \( \mathbf{X}_t = (X_{t1}, X_{t2}, \ldots, X_{tp}) \) is the row vector of \( p \) covariates (intercept, geography, insurance type) for observation \( t \).
+* \( \boldsymbol{\beta} = (\beta_{1}, \beta_{2}, \ldots, \beta_{p}) \) is the column vector of regression coefficients.
+
 ```{r class.output="numberLines", class.results="numberLines", results='markup'}
 # cat(sprintf("\`\`\`{class.output = }
 #   %s\n
@@ -427,8 +447,89 @@ cat(q7_jags_str)
 # ))
 ```
 
-Convergence was checked in a similar way as for the model defined in Question 3. In brief, trace plots showed the expected caterpillar pattern,  posterior densities per parameter and chain showed superposed well and autocorrelation plots revealed decreasing autocorrelation with increasing lag number - all indicating convergence.
+The design matrix we use creates dummy variables for each categorical variable with one reference level – Private for insurance and Georgia for geography (note that the reference level is changed for Question 8).
 
+We assume non-informative priors for all parameters:
+
+$$
+\beta_j \sim \mathcal{N}(0, 100)
+$$
+
+which corresponds to `dnorm(0, 0.01)` in BUGS syntax.
+
+### BUGS MODEL CODE
+
+```{r, engine='BUGS', eval=FALSE}
+model
+{
+  # Likelihood
+  for (t in 1:T) {
+    y[t] ~ dbin(p[t], K[t])
+    logit(p[t]) <- inprod(beta, X[t,])
+  }
+
+  # Priors
+  for (i in 1:7){
+    beta[i] ~ dnorm(0.0, 0.01)
+  }
+
+  # Vaccine coverage
+  for (t in 1:T){
+    # log-odds
+    lo[t] <- inprod(beta, X[t,])
+    # convert to probability / vaccine coverage
+    coverage[t] <- exp(lo[t]) / (1 + exp(lo[t]))
+  }
+}
+```
+
+### Model Interpretation
+We estimate one intercept parameter, \( \beta_1 \), and six slope parameters, \( \beta_2 \) through \( \beta_7 \), which quantify the effect of insurance status and geographic location on the log-odds of vaccination, relative to the reference group (children with private insurance in the state of Georgia):
+
+* If \( \beta_j > 0 \), the log-odds of vaccination increase, corresponding to a higher probability of vaccination compared to the reference group.
+* If \( \beta_j < 0 \), the log-odds of vaccination decrease, corresponding to a lower probability of vaccination compared to the reference group.
+* If \( \beta_j = 0 \), there is no effect on the log-odds and thus no difference in the probability of vaccination relative to the reference group.
+
+The log-odds are then transformed into estimated vaccination coverage \( \pi_t \) using the inverse logit function:
+
+$$
+\pi_t = \frac{\exp(\log(\text{odds}))}{1 + \exp(\log(\text{odds}))}
+$$
+
+The resulting value represents the probability that the children in the given group are vaccinated or, in other terms, the value represents the proportion of vaccinated children.
+
+Based on our model estimates, children who have private insurance in the state of North Carolina have the highest vaccination probability of 94%. The lowest proportion of vaccinated children is in Wisconsin for uninsured children. The vaccination probability is 66.6%.
+
+Additionally, we compare the estimates obtained from the logistic model with the analytical estimates given two conjugate priors: one noninformative Beta(1, 1) prior and one strongly informative prior with a vaccination coverage greater than 90%, namely Beta(150, 7).
+
+Mostly, the derivations between the logit model estimates and the analytical estimates are small to moderate. However, in groups with small sample size — especially the case for uninsured children — the differences in estimates are noticeable. The smallest derivation in estimates differs by only 0.01 percentage points, while the largest differs by 25.2 percentage points.
+
+Our results indicate that the choice of prior distributions can have a large impact on the estimates when the sample size is small.
+
+```{r tbl-q7-post}
+# cols <- colnames(q5)
+# cols[8] = "$\\Delta_{Beta(150,7)}$"
+
+latex_table <- kbl(
+    q7,
+    digits = 3,
+    format = 'latex',
+    booktabs = T,
+    escape = F,
+    linesep = c('', '', '\\addlinespace'),
+    #caption = 'Posterior estimates of mean vaccine coverage obtained from a logistic regression model with region-specific intercepts compared to estimates from conjugate prior modeling. Subscripts indicate whether the estimate was derived from the logistic regression model or from a specified prior distribution. $\\Delta_{Beta(\\alpha, \\beta)}$ gives the difference between the logistic regression posterior and the corresponding conjugate prior posterior. Vaccine coverage for MS/Medicaid is only available from the logistic regression model.'
+  ) %>% column_spec(2, width = "2.5cm")
+#writeLines(latex_table, "output_q7.tex")
+latex_table
+```
+
+```{r fig-q7-comp}
+# grid.arrange(grobs = list(q5_compbeta11_plot, q5_compbetaconf_plot), ncol = 2)
+q7_compplot + ylab(TeX("$\\bar\\pi_{logreg} - \\bar\\pi_{\\Beta(\\alpha, \\beta)}$"))
+```
+
+### Convergence checks
+Convergence of the MCMC chains was assessed using the same means as discussed in Question 3. None of the convergence diagnostics indicated any concerns, suggesting reliable sampling from the posterior distribution.
 
 ```{r traceplots q7}
 mcmc_trace(q7_mcmc[,beta_params]) + 
@@ -474,28 +575,6 @@ geweke_q7 <- kbl(
 
 #writeLines(geweke_q7, "geweke_q7.tex")
 geweke_q7
-```
-
-```{r tbl-q7-post}
-# cols <- colnames(q5)
-# cols[8] = "$\\Delta_{Beta(150,7)}$"
-
-latex_table <- kbl(
-    q7,
-    digits = 3,
-    format = 'latex',
-    booktabs = T,
-    escape = F,
-    linesep = c('', '', '\\addlinespace'),
-    #caption = 'Posterior estimates of mean vaccine coverage obtained from a logistic regression model with region-specific intercepts compared to estimates from conjugate prior modeling. Subscripts indicate whether the estimate was derived from the logistic regression model or from a specified prior distribution. $\\Delta_{Beta(\\alpha, \\beta)}$ gives the difference between the logistic regression posterior and the corresponding conjugate prior posterior. Vaccine coverage for MS/Medicaid is only available from the logistic regression model.'
-  ) %>% column_spec(2, width = "2.5cm")
-#writeLines(latex_table, "output_q7.tex")
-latex_table
-```
-
-```{r fig-q7-comp}
-# grid.arrange(grobs = list(q5_compbeta11_plot, q5_compbetaconf_plot), ncol = 2)
-q7_compplot + ylab(TeX("$\\bar\\pi_{logreg} - \\bar\\pi_{\\Beta(\\alpha, \\beta)}$"))
 ```
 
 # Question 8
