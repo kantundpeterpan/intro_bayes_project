@@ -492,7 +492,7 @@ posterior_df <- q7_post_summary %>%
 posterior_df$row_id <- 1:nrow(posterior_df)
 
 # Create the caterpillar plot
-ggplot(posterior_df, aes(x = Mean, y = reorder(Label, Mean), color = Insurance)) +
+fig.caterpill <- ggplot(posterior_df, aes(x = Mean, y = reorder(Label, Mean), color = Insurance)) +
   geom_point(size = 3) +
   geom_errorbarh(aes(xmin = LL, xmax = UL), height = 0.2) +
   labs(
@@ -510,7 +510,7 @@ ggplot(posterior_df, aes(x = Mean, y = reorder(Label, Mean), color = Insurance))
   scale_color_brewer(palette = "Set1") +
   geom_vline(xintercept = mean(posterior_df$Mean), linetype = "dashed", 
              color = "gray50", alpha = 0.7)
-ggsave("fig.caterpill.png")
+ggsave("fig.caterpill.png", fig.caterpill, width = 6, height = 5)
 
 ```
 
@@ -561,7 +561,7 @@ setwd("./export/figures")
 q10_ppddf %>% 
   ggplot(aes(x = value)) +
   geom_histogram(bins = 22, aes(y = ..density..),
-    color = 'black', fill = 'white') + 
+    color = 'white', fill = 'purple') + 
   geom_density() +
   theme_minimal() +
   xlab(TeX("$\\Y^{(s)}$"))
