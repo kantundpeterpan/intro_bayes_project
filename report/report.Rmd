@@ -469,6 +469,15 @@ q8_summary %>% kbl(
   ) %>% add_header_above(
     header = c(" "=2, "Summary measures"=3, "95% HPD interval"=2)
   )
+
+kable_q8_latex <- q8_summary %>% kbl(
+    digits = 3,
+    caption = 'Posterior summary measures of the ratio of the vaccine coverage in a given Geography/Insurance group stratum compared to the corresponding Insurance group in North Carolina',
+    format = "latex"
+  ) %>% add_header_above(
+    header = c(" "=2, "Summary measures"=3, "95% HPD interval"=2)
+  )
+
 ```
 
 ```{r fig-q8-ridge, fig.cap=ridge_plot_cap}
