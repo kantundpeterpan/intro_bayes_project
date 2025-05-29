@@ -26,7 +26,8 @@ library(latex2exp)
 library(stringr)
 library(ggridges)
 
-source("../functions.R")
+#source("../functions.R")
+source("./functions.R")
 
 # Load data
 vaccination_data <- data.frame(
