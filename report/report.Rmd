@@ -554,6 +554,15 @@ knitr::kable(
 )  %>% add_header_above(
     header = c("Summary measures"=3, "95% HPD interval"=2)
   )
+
+# save table for export to overleaf
+tab_q10_latex <- knitr::kable(
+    q10_final,
+    caption = q10_tbl_cap,
+    format = "latex"
+)  %>% add_header_above(
+    header = c("Summary measures"=3, "95% HPD interval"=2)
+)
 ```
 
 ```{r}
