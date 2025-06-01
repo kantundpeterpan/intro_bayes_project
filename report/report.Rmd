@@ -383,8 +383,10 @@ knitr::kable(
 ```
 
 ```{r fig-q5-comp, fig.cap=fig_q5_comp_cap}
+setwd("./export/figures")
 # grid.arrange(grobs = list(q5_compbeta11_plot, q5_compbetaconf_plot), ncol = 2)
-q5_compplot + ylab(TeX("$\\bar\\pi_{logreg} - \\bar\\pi_{\\Beta(\\alpha, \\beta)}$"))
+q5_compplot = q5_compplot + labs( y = TeX("$\\bar\\pi_{logreg} - \\bar\\pi_{\\Beta(\\alpha, \\beta)}$"), x = "Geography")
+ggsave("fig_compplot_q5.png", q5_compplot, height = 4, width = 6)
 ```
 
 
@@ -397,7 +399,10 @@ Based on the logistic regression model, what is the probability (a posteriori) t
 To answer this question, the differences $\pi_{private} - \pi_{medicaid}$ and $\pi_{private} - \pi_{uninsured}$ were incorporated and observed during the MCMC run of the model specified in Question 3. Posterior densities and empirical CDF are shown in @fig-q6-diff.
 
 ```{r fig-q6-diff}
+setwd("./export/figures")
 diff_dens_plot
+diff_dens_plot_notitle
+ggsave("fig_diffdens.png", diff_dens_plot_notitle, height = 4, width = 6)
 ```
 
 The probabilities of interest defined below and can be approximated by using the posterior samples from the MCMC runs :
