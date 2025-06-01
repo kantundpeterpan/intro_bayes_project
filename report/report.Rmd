@@ -329,12 +329,21 @@ Make a plot of the posterior of the model parameters and give posterior summary 
 :::
 
 ```{r fig-alpha-dens, fig.height=3}
-ggplot(alpha_plot_df, aes(x = value)) +
+setwd("./export/figures")
+label_math <- c(
+  alpha_0 = "alpha[0]",
+  alpha_1 = "alpha[1]",
+  alpha_2 = "alpha[2]"
+)
+
+alpha_dens <- ggplot(alpha_plot_df, aes(x = value)) +
   geom_density() +
-  labs(x = "Parameter Value", y = "Density",
-       title = "Posterior Density by Parameter") +
-  facet_wrap(~ parameter, scales = "free") + # Use facet_wrap on the 'parameter' column
-  theme_minimal()
+  labs(x = "Parameter Value", y = "Density") + #,
+       #title = "Posterior Density by Parameter") +
+  facet_wrap(~ parameter, labeller = labeller(parameter = as_labeller(label_math, label_parsed)), scales = "free") + # Use facet_wrap on the 'parameter' column
+  theme_minimal() +
+  theme(strip.text = element_text(size = 11))
+ggsave("fig_alpha_dens.png", alpha_dens, height = 4, width = 6)
 ```
 
 ```{r tbl-alpha-post}
@@ -459,7 +468,7 @@ kbl(
 setwd("./export/figures")
 # grid.arrange(grobs = list(q5_compbeta11_plot, q5_compbetaconf_plot), ncol = 2)
 q7_compplot <- q7_compplot + labs(y = TeX("$\\bar\\pi_{logreg} - \\bar\\pi_{\\Beta(\\alpha, \\beta)}$"), x = "Geography")
-ggsave("fig_compplot_q7.png", q5_compplot, height = 4, width = 6)
+ggsave("fig_compplot_q7.png", q7_compplot, height = 4, width = 6)
 ```
 
 # Question 8
