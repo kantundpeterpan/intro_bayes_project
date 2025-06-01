@@ -157,7 +157,9 @@ For modeling prior knowledge that vaccine coverage is about 90%, we chose the Be
 ### Comparison of priors
 
 ```{r , fig.cap=fig_q1_compprior_cap}
-plot_priors + ylab('density')
+setwd("./export/figures")
+plot_priors
+ggsave("fig_priors.png", plot_priors, height = 5, width = 6)
 ```
 
 ## Results
@@ -264,24 +266,28 @@ model_run
 
 **Traceplots**
 ```{r fig-q3-trace, fig.height=2}
+setwd("./export/figures")
 # par(mfrow=c(1,3))
 # plot(mcmc[,c("pi_private", "pi_medicaid", "pi_uninsured")], trace = T, density = F)
-mcmc_trace(mcmc[,alpha_params]) + 
+mcmc_trace <- mcmc_trace(mcmc[,alpha_params]) + 
   legend_move('top') + 
   theme(axis.text.x = element_text(angle = 45))
+ggsave("fig_traceplots.png", mcmc_trace, height = 4, width = 10)
 ```
 
 
 **Density plots per chain**
 
 ```{r fig-q3-denschain, fig.height=2}
-ggplot(alpha_plot_df, aes(x = value, color = factor(chain))) +
+setwd("./export/figures")
+densityplot <- ggplot(alpha_plot_df, aes(x = value, color = factor(chain))) +
   geom_density() +
   labs(x = "Parameter Value", y = "Density",
-       title = "Posterior Density by Parameter and Chain",
+       #title = "Posterior Density by Parameter and Chain",
        color = "Chain") +
   facet_wrap(~ parameter, scales = "free") + # Use facet_wrap on the 'parameter' column
   theme_minimal()
+ggsave("fig_densityplots.png", densityplot, height = 4, width = 6)
 ```
 
 **Autocorrelation plot**
@@ -385,7 +391,7 @@ knitr::kable(
 ```{r fig-q5-comp, fig.cap=fig_q5_comp_cap}
 setwd("./export/figures")
 # grid.arrange(grobs = list(q5_compbeta11_plot, q5_compbetaconf_plot), ncol = 2)
-q5_compplot = q5_compplot + labs( y = TeX("$\\bar\\pi_{logreg} - \\bar\\pi_{\\Beta(\\alpha, \\beta)}$"), x = "Geography")
+q5_compplot <- q5_compplot + labs( y = TeX("$\\bar\\pi_{logreg} - \\bar\\pi_{\\Beta(\\alpha, \\beta)}$"), x = "Geography")
 ggsave("fig_compplot_q5.png", q5_compplot, height = 4, width = 6)
 ```
 
@@ -450,8 +456,10 @@ kbl(
 ```
 
 ```{r fig-q7-comp}
+setwd("./export/figures")
 # grid.arrange(grobs = list(q5_compbeta11_plot, q5_compbetaconf_plot), ncol = 2)
-q7_compplot + ylab(TeX("$\\bar\\pi_{logreg} - \\bar\\pi_{\\Beta(\\alpha, \\beta)}$"))
+q7_compplot <- q7_compplot + labs(y = TeX("$\\bar\\pi_{logreg} - \\bar\\pi_{\\Beta(\\alpha, \\beta)}$"), x = "Geography")
+ggsave("fig_compplot_q7.png", q5_compplot, height = 4, width = 6)
 ```
 
 # Question 8
