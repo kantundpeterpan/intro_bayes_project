@@ -26,7 +26,8 @@ library(latex2exp)
 library(stringr)
 library(ggridges)
 
-source("../functions.R")
+#source("../functions.R")
+source("./functions.R")
 
 # Load data
 vaccination_data <- data.frame(
@@ -340,7 +341,10 @@ q5_compplot <-  q5_long %>%
   ggplot(aes(x = Geo., y = value, fill = Ins.)) + 
   geom_bar(stat='identity', position='dodge') + 
   facet_wrap(~name, labeller = label_parsed) + 
-  theme_minimal() + theme(legend.position = "top")
+  theme_minimal() + theme(legend.position = "top",
+                          strip.text = element_text(size = 12),
+                          axis.title = element_text(size = 12), 
+                          axis.title.x = element_text("Geography"))
 
 fig_q5_comp_cap = paste("Differences between posterior means of vaccine coverage per region and insurance status obtained from logistic regression and conjugate pair modeling.
 Differences are most pronounced for the Uninsured group in MS, NC, WC  when using a $Beta(1,1)$ prior and all states when using a ", sprintf("$Beta(%s, %s)$", alpha_above90, beta_above90), "prior.")
@@ -354,7 +358,11 @@ diff_plot_df <- mcmcdf %>%
     cols=c(diff_priv_medicaid, diff_priv_uninsured),
     names_to='parameter',
     values_to='value'
-  )
+  ) %>%
+  mutate(parameter = (recode_factor(as.factor(parameter),
+                                   "diff_priv_medicaid" = "Difference Private-Medicaid",
+                                   "diff_priv_uninsured" = "Difference Private-Uninsured")
+  ))
 
 diff_dens_plot <- ggplot(diff_plot_df, aes(x = value)) +
   geom_density(aes(y = after_stat(density)), color = "blue", fill = "blue", alpha = 0.3) +
@@ -366,6 +374,18 @@ diff_dens_plot <- ggplot(diff_plot_df, aes(x = value)) +
   facet_wrap(~ parameter, scales = "free") +
   theme_classic() +
   labs(x = expression("Delta"), title = "Posterior densities and ECDF of differences in vaccine coverages between insurance groups")
+
+diff_dens_plot_notitle <- ggplot(diff_plot_df, aes(x = value)) +
+  geom_density(aes(y = after_stat(density)), color = "blue", fill = "blue", alpha = 0.3) +
+  geom_line(stat = "ecdf", aes(y = after_stat(y) * max(density(x)$y)), color = "red") +
+  scale_y_continuous(
+    name = "Density",
+    sec.axis = sec_axis(~./max(density(diff_plot_df$value)$y), name = "ECDF") # This assumes max density is similar across facets, might need adjustment
+  ) +
+  facet_wrap(~ parameter, scales = "free") +
+  theme_classic() +
+  labs(x = expression("Delta"), title = "")
+
 
 ## Probabilites
 ## P(pi_priv > pi_medicaid) = P(pi_priv - pi_medicaid > 0)

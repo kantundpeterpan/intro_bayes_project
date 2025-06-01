@@ -157,7 +157,9 @@ For modeling prior knowledge that vaccine coverage is about 90%, we chose the Be
 ### Comparison of priors
 
 ```{r , fig.cap=fig_q1_compprior_cap}
-plot_priors + ylab('density')
+setwd("./export/figures")
+plot_priors
+ggsave("fig_priors.png", plot_priors, height = 5, width = 6)
 ```
 
 ## Results
@@ -264,24 +266,28 @@ model_run
 
 **Traceplots**
 ```{r fig-q3-trace, fig.height=2}
+setwd("./export/figures")
 # par(mfrow=c(1,3))
 # plot(mcmc[,c("pi_private", "pi_medicaid", "pi_uninsured")], trace = T, density = F)
-mcmc_trace(mcmc[,alpha_params]) + 
+mcmc_trace <- mcmc_trace(mcmc[,alpha_params]) + 
   legend_move('top') + 
   theme(axis.text.x = element_text(angle = 45))
+ggsave("fig_traceplots.png", mcmc_trace, height = 4, width = 10)
 ```
 
 
 **Density plots per chain**
 
 ```{r fig-q3-denschain, fig.height=2}
-ggplot(alpha_plot_df, aes(x = value, color = factor(chain))) +
+setwd("./export/figures")
+densityplot <- ggplot(alpha_plot_df, aes(x = value, color = factor(chain))) +
   geom_density() +
   labs(x = "Parameter Value", y = "Density",
-       title = "Posterior Density by Parameter and Chain",
+       #title = "Posterior Density by Parameter and Chain",
        color = "Chain") +
   facet_wrap(~ parameter, scales = "free") + # Use facet_wrap on the 'parameter' column
   theme_minimal()
+ggsave("fig_densityplots.png", densityplot, height = 4, width = 6)
 ```
 
 **Autocorrelation plot**
@@ -383,8 +389,10 @@ knitr::kable(
 ```
 
 ```{r fig-q5-comp, fig.cap=fig_q5_comp_cap}
+setwd("./export/figures")
 # grid.arrange(grobs = list(q5_compbeta11_plot, q5_compbetaconf_plot), ncol = 2)
-q5_compplot + ylab(TeX("$\\bar\\pi_{logreg} - \\bar\\pi_{\\Beta(\\alpha, \\beta)}$"))
+q5_compplot <- q5_compplot + labs( y = TeX("$\\bar\\pi_{logreg} - \\bar\\pi_{\\Beta(\\alpha, \\beta)}$"), x = "Geography")
+ggsave("fig_compplot_q5.png", q5_compplot, height = 4, width = 6)
 ```
 
 
@@ -397,7 +405,10 @@ Based on the logistic regression model, what is the probability (a posteriori) t
 To answer this question, the differences $\pi_{private} - \pi_{medicaid}$ and $\pi_{private} - \pi_{uninsured}$ were incorporated and observed during the MCMC run of the model specified in Question 3. Posterior densities and empirical CDF are shown in @fig-q6-diff.
 
 ```{r fig-q6-diff}
+setwd("./export/figures")
 diff_dens_plot
+diff_dens_plot_notitle
+ggsave("fig_diffdens.png", diff_dens_plot_notitle, height = 4, width = 6)
 ```
 
 The probabilities of interest defined below and can be approximated by using the posterior samples from the MCMC runs :
@@ -445,8 +456,10 @@ kbl(
 ```
 
 ```{r fig-q7-comp}
+setwd("./export/figures")
 # grid.arrange(grobs = list(q5_compbeta11_plot, q5_compbetaconf_plot), ncol = 2)
-q7_compplot + ylab(TeX("$\\bar\\pi_{logreg} - \\bar\\pi_{\\Beta(\\alpha, \\beta)}$"))
+q7_compplot <- q7_compplot + labs(y = TeX("$\\bar\\pi_{logreg} - \\bar\\pi_{\\Beta(\\alpha, \\beta)}$"), x = "Geography")
+ggsave("fig_compplot_q7.png", q5_compplot, height = 4, width = 6)
 ```
 
 # Question 8
@@ -469,6 +482,15 @@ q8_summary %>% kbl(
   ) %>% add_header_above(
     header = c(" "=2, "Summary measures"=3, "95% HPD interval"=2)
   )
+
+kable_q8_latex <- q8_summary %>% kbl(
+    digits = 3,
+    caption = 'Posterior summary measures of the ratio of the vaccine coverage in a given Geography/Insurance group stratum compared to the corresponding Insurance group in North Carolina',
+    format = "latex"
+  ) %>% add_header_above(
+    header = c(" "=2, "Summary measures"=3, "95% HPD interval"=2)
+  )
+
 ```
 
 ```{r fig-q8-ridge, fig.cap=ridge_plot_cap}
@@ -482,7 +504,7 @@ Make a caterpillar plot of the estimated coverage (per location and insurance st
 :::
 
 ```{r}
-
+setwd("./export/figures")
 # Create combined labels and order by mean values
 posterior_df <- q7_post_summary %>%
   mutate(Label = paste(Geography, "-", Insurance)) %>%
@@ -491,13 +513,30 @@ posterior_df <- q7_post_summary %>%
 # Add row number for visualization
 posterior_df$row_id <- 1:nrow(posterior_df)
 
+# observed coverage
+obs_coverage <- vaccination_data %>% 
+  select(Geography, Insurance, Vaccinated, SampleSize) %>%
+  mutate(obs_cov = (Vaccinated / SampleSize),
+         Label = paste(Geography, "-", Insurance)) %>%
+  select(-Geography, -Insurance, -Vaccinated, -SampleSize)
+
+posterior_df <- full_join(obs_coverage, posterior_df, by = "Label")
+
+
 # Create the caterpillar plot
-ggplot(posterior_df, aes(x = Mean, y = reorder(Label, Mean), color = Insurance)) +
+fig.caterpill <- ggplot(posterior_df, aes(x = Mean, y = reorder(Label, Mean), color = Insurance)) +
   geom_point(size = 3) +
   geom_errorbarh(aes(xmin = LL, xmax = UL), height = 0.2) +
+  
+  # Observed coverage as second layer
+  geom_point(aes(x = obs_cov, shape = "Observed Coverage"), 
+             size = 3, color = "grey30", alpha = 0.5) +
+  # 
+  scale_color_brewer(palette = "Set1") +
+  scale_shape_manual(name = "", values = c("Observed Coverage" = 15)) +
   labs(
-    title = "Caterpillar Plot of Posterior Means \n with Credible Intervals",
-    subtitle = "Ordered by posterior mean values",
+    #title = "Caterpillar Plot of Posterior Means \n with Credible Intervals",
+    #subtitle = "Ordered by posterior mean values",
     x = "Posterior Mean",
     y = ""
   ) +
@@ -510,6 +549,8 @@ ggplot(posterior_df, aes(x = Mean, y = reorder(Label, Mean), color = Insurance))
   scale_color_brewer(palette = "Set1") +
   geom_vline(xintercept = mean(posterior_df$Mean), linetype = "dashed", 
              color = "gray50", alpha = 0.7)
+ggsave("fig.caterpill.png", fig.caterpill, width = 6, height = 5)
+
 ```
 
 
@@ -552,16 +593,27 @@ knitr::kable(
 )  %>% add_header_above(
     header = c("Summary measures"=3, "95% HPD interval"=2)
   )
+
+# save table for export to overleaf
+tab_q10_latex <- knitr::kable(
+    q10_final,
+    caption = q10_tbl_cap,
+    format = "latex"
+)  %>% add_header_above(
+    header = c("Summary measures"=3, "95% HPD interval"=2)
+)
 ```
 
 ```{r}
+setwd("./export/figures")
 q10_ppddf %>% 
   ggplot(aes(x = value)) +
   geom_histogram(bins = 22, aes(y = ..density..),
-    color = 'black', fill = 'white') + 
+    color = 'white', fill = 'purple') + 
   geom_density() +
   theme_minimal() +
   xlab(TeX("$\\Y^{(s)}$"))
+ggsave("fig_ppd_ms_mediaid.png")
 ```
 
 The posterior predictive mean for a new sample from the MS/Medicaid population with $n=519$ is $\hat Y^{S+1} = `r q10_final[,'Mean']`$. With a posterior probability of 95% $\tilde{y}$ lies in  $\left[`r q10_final[,'LL']`, `r q10_final[,'UL']`\right]$.
